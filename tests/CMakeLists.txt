@@ -17,9 +17,9 @@ file(DOWNLOAD https://prng.di.unimi.it/xoshiro256plusplus.c ${TEST_INCLUDE_DIR}/
 
 add_executable(testSplitMix split_mix_tests.cpp)
 target_link_libraries(testSplitMix PRIVATE vectorXoroshiro Catch2::Catch2 benchmark::benchmark)
-target_include_directories(testSplitMix PRIVATE ${TEST_INCLUDE_DIR})
+target_include_directories(testSplitMix PRIVATE SYSTEM ${TEST_INCLUDE_DIR})
 
 
 add_executable(testXoroshiro test_xoroshiro.cpp)
 target_link_libraries(testXoroshiro PRIVATE vectorXoroshiro Catch2::Catch2 benchmark::benchmark)
-target_include_directories(testXoroshiro PRIVATE ${TEST_INCLUDE_DIR})
+target_include_directories(testXoroshiro PRIVATE SYSTEM ${TEST_INCLUDE_DIR})
