@@ -41,6 +41,9 @@ class XoroshiroPlusPlus {
         m_state[3] = state[3];
     }
 
+    static inline constexpr std::uint64_t min() noexcept { return std::numeric_limits<std::uint64_t>::lowest(); }
+    static inline constexpr std::uint64_t max() noexcept { return std::numeric_limits<std::uint64_t>::max(); }
+
    private:
     std::uint64_t m_state[4];
     //
