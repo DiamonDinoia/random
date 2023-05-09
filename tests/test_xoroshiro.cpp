@@ -20,4 +20,10 @@ TEST_CASE("xoroshiro256plusplus", "[xoroshiro256plusplus]") {
     for (int i = 0; i < tests; ++i) {
         REQUIRE(xoroshiroPlusPlus() == next());
     }
+    xoroshiroPlusPlus.jump();
+    jump();
+    REQUIRE(xoroshiroPlusPlus.getState()[0] == s[0]);
+    REQUIRE(xoroshiroPlusPlus.getState()[1] == s[1]);
+    REQUIRE(xoroshiroPlusPlus.getState()[2] == s[2]);
+    REQUIRE(xoroshiroPlusPlus.getState()[3] == s[3]);
 }
