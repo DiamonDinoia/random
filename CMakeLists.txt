@@ -69,5 +69,6 @@ CPMAddPackage(
 add_library(vectorXoroshiro INTERFACE)
 target_include_directories(vectorXoroshiro INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_features(vectorXoroshiro INTERFACE cxx_std_17) # This means at least C++17
+target_link_libraries(vectorXoroshiro INTERFACE hwy)
 
 add_subdirectory(tests)

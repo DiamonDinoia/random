@@ -22,14 +22,12 @@ class SplitMix64 {
         z               = (z ^ (z >> 27)) * 0x94d049bb133111eb;
         return z ^ (z >> 31);
     }
-
+    //
     inline constexpr std::uint64_t min() noexcept { return std::numeric_limits<std::uint64_t>::lowest(); }
-
     inline constexpr std::uint64_t max() noexcept { return std::numeric_limits<std::uint64_t>::max(); }
-
-    constexpr std::uint64_t        getState() const { return m_state; }
-
-    constexpr void                 setState(std::uint64_t state) { m_state = state; }
+    //
+    constexpr std::uint64_t getState() const { return m_state; }
+    constexpr void          setState(std::uint64_t state) { m_state = state; }
 
    private:
     std::uint64_t m_state;

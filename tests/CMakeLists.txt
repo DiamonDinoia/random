@@ -19,7 +19,14 @@ add_executable(testSplitMix split_mix_tests.cpp)
 target_link_libraries(testSplitMix PRIVATE vectorXoroshiro Catch2::Catch2 benchmark::benchmark)
 target_include_directories(testSplitMix PRIVATE SYSTEM ${TEST_INCLUDE_DIR})
 
-
 add_executable(testXoroshiro test_xoroshiro.cpp)
 target_link_libraries(testXoroshiro PRIVATE vectorXoroshiro Catch2::Catch2 benchmark::benchmark)
 target_include_directories(testXoroshiro PRIVATE SYSTEM ${TEST_INCLUDE_DIR})
+
+add_executable(testSplitMixVector testVectorSplitMix64.cpp)
+target_link_libraries(testSplitMixVector PRIVATE vectorXoroshiro Catch2::Catch2 benchmark::benchmark)
+target_include_directories(testSplitMixVector PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_executable(testVectorXoroshiroPlusPlus testVectorXoroshiroPlusPlus.cpp)
+target_link_libraries(testVectorXoroshiroPlusPlus PRIVATE vectorXoroshiro Catch2::Catch2 benchmark::benchmark)
+target_include_directories(testVectorXoroshiroPlusPlus PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
