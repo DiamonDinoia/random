@@ -2,8 +2,8 @@
 // Created by mbarbone on 5/9/23.
 //
 
-#ifndef CPP_LEARNING_XOROSHIROPLUSPLUS_H
-#define CPP_LEARNING_XOROSHIROPLUSPLUS_H
+#ifndef CPP_LEARNING_XOSHIROPLUSPLUS_H
+#define CPP_LEARNING_XOSHIROPLUSPLUS_H
 
 #include <array>
 #include <cstdint>
@@ -11,24 +11,22 @@
 
 #include "splitMix64.h"
 
-class XoroshiroPlusPlus {
+class XoshiroPlusPlus {
    public:
-    inline constexpr explicit XoroshiroPlusPlus(const std::uint64_t seed) noexcept : m_state{} {
+    inline constexpr explicit XoshiroPlusPlus(const std::uint64_t seed) noexcept : m_state{} {
         SplitMix64 splitMix64{seed};
         for (auto& element : m_state) { element = splitMix64(); }
     }
 
-    inline constexpr explicit XoroshiroPlusPlus(const std::uint64_t seed, const std::uint64_t thread_id) noexcept
-        : m_state{} {
-        SplitMix64 splitMix64{seed};
-        for (auto& element : m_state) { element = splitMix64(); }
+    inline constexpr explicit XoshiroPlusPlus(const std::uint64_t seed, const std::uint64_t thread_id) noexcept
+        : XoshiroPlusPlus(seed) {
         for (auto i = UINT64_C(0); i < thread_id; ++i) { jump(); }
     }
 
-    inline constexpr XoroshiroPlusPlus(const XoroshiroPlusPlus& other) noexcept            = default;
-    inline constexpr XoroshiroPlusPlus(XoroshiroPlusPlus&& other) noexcept                 = default;
-    inline constexpr XoroshiroPlusPlus& operator=(const XoroshiroPlusPlus& other) noexcept = default;
-    inline constexpr XoroshiroPlusPlus& operator=(XoroshiroPlusPlus&& other) noexcept      = default;
+    inline constexpr XoshiroPlusPlus(const XoshiroPlusPlus& other) noexcept            = default;
+    inline constexpr XoshiroPlusPlus(XoshiroPlusPlus&& other) noexcept                 = default;
+    inline constexpr XoshiroPlusPlus& operator=(const XoshiroPlusPlus& other) noexcept = default;
+    inline constexpr XoshiroPlusPlus& operator=(XoshiroPlusPlus&& other) noexcept      = default;
     //
     inline constexpr std::uint64_t operator()() noexcept { return next(); }
     //
@@ -41,8 +39,9 @@ class XoroshiroPlusPlus {
         m_state[3] = state[3];
     }
 
-    static inline constexpr std::uint64_t min() noexcept { return std::numeric_limits<std::uint64_t>::lowest(); }
+    static inline constexpr std::uint64_t min() noexcept { return std::numeric_limits<std::uint64_t>::min(); }
     static inline constexpr std::uint64_t max() noexcept { return std::numeric_limits<std::uint64_t>::max(); }
+    static inline constexpr std::uint64_t stateSize() noexcept { return 4; }
 
    private:
     std::uint64_t m_state[4];
@@ -128,4 +127,4 @@ class XoroshiroPlusPlus {
     }
 };
 
-#endif  // CPP_LEARNING_XOROSHIROPLUSPLUS_H
+#endif  // CPP_LEARNING_XOSHIROPLUSPLUS_H

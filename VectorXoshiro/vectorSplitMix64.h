@@ -26,7 +26,6 @@ class VectorSplitMix64 {
     //
     inline constexpr auto operator()() {
         namespace hn = hwy::HWY_NAMESPACE;
-        const hn::ScalableTag<std::uint64_t> m_tag;
         //
         auto z = m_state +  hn::Set(hn::DFromV<T>(), 0x9e3779b97f4a7c15);
         z = hn::Mul(hn::Xor(z, hn::ShiftRight<30>(z)), hn::Set(hn::DFromV<T>(), 0xbf58476d1ce4e5b9));

@@ -2,7 +2,7 @@
 // Created by mbarbone on 5/9/23.
 //
 
-#include <VectorXoroshiro/splitMix64.h>
+#include <VectorXoshiro/splitMix64.h>
 #include <splitmix64.c>
 #include <random>
 #define CATCH_CONFIG_MAIN

@@ -6,7 +6,7 @@
 #define HWY_TARGET_INCLUDE "testVectorSplitMix64.cpp"  // this file
 #include <hwy/foreach_target.h>                        // must come before highway.h included by splitmix
 #include <hwy/highway.h>
-#include <VectorXoroshiro/vectorSplitMix64.h>
+#include <VectorXoshiro/vectorSplitMix64.h>
 
 #define CATCH_CONFIG_MAIN
 #include <catch2/catch.hpp>
