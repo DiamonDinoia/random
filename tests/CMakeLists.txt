@@ -1,4 +1,3 @@
-
 CPMAddPackage(
         NAME catch2
         GITHUB_REPOSITORY catchorg/Catch2
@@ -8,6 +7,8 @@ CPMAddPackage(
         EXCLUDE_FROM_ALL YES
         SYSTEM
 )
+include(CTest)
+enable_testing()
 
 set(TEST_INCLUDE_DIR ${CMAKE_CURRENT_BINARY_DIR}/include)
 

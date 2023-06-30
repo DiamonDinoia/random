@@ -50,7 +50,7 @@ class XoshiroPlusPlus {
         return (x << k) | (x >> (64 - k));
     }
     //
-    std::uint64_t next() noexcept {
+    constexpr std::uint64_t next() noexcept {
         const std::uint64_t result = rotl(m_state[0] + m_state[3], 23) + m_state[0];
         //
         const std::uint64_t t = m_state[1] << 17;
