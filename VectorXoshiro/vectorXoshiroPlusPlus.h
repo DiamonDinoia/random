@@ -12,7 +12,7 @@
 
 #include "xoshiroPlusPlus.h"
 
-HWY_BEFORE_NAMESPACE();    // required if not using HWY_ATTR
+HWY_BEFORE_NAMESPACE();  // required if not using HWY_ATTR
 
 namespace HWY_NAMESPACE {  // required: unique per target
 
@@ -59,11 +59,19 @@ class vectorXoshiroPlusPlus {
             hn::Store(m_state[i], hn::DFromV<T>(), stateArray.get() + i * lanes);
         }
         std::array<std::uint64_t, stateSize()> state;
-        auto                       index = 0;
+        //
+        auto index = 0;
         for (auto i = 0UL; i < lanes; ++i) {
             for (auto j = 0UL; j < XoshiroPlusPlus::stateSize(); ++j) { state[index++] = stateArray[lanes * j + i]; }
         }
         return state;
+    }
+
+    constexpr auto uniform() noexcept {
+        namespace hn    = hwy::HWY_NAMESPACE;
+        const auto bits = hn::ShiftRight<11>(next());
+        const auto real = hn::ConvertTo(fl, bits);
+        return real * MUL_VALUE;
     }
 
     static constexpr std::uint64_t min() noexcept { return std::numeric_limits<std::uint64_t>::min(); }
@@ -72,22 +80,28 @@ class vectorXoshiroPlusPlus {
    private:
     T m_state[4];
     //
-    static inline constexpr T rotl(const T x, int k) noexcept {
+    static constexpr hwy::HWY_NAMESPACE::ScalableTag<double> fl;
+    //
+    const decltype(hwy::HWY_NAMESPACE::Undefined(fl)) MUL_VALUE = hwy::HWY_NAMESPACE::Set(fl, 0x1.0p-53);
+
+    //
+    template <int k>
+    static inline constexpr T rotl(const T x) noexcept {
         namespace hn = hwy::HWY_NAMESPACE;
-        return hn::Or(hn::ShiftLeftSame(x, k), hn::ShiftRightSame(x, 64 - k));
+        return hn::Or(hn::ShiftLeft<k>(x), hn::ShiftRight<64 - k>(x));
     }
 
     T next() noexcept {
         namespace hn   = hwy::HWY_NAMESPACE;
-        const T result = hn::Add(rotl(hn::Add(m_state[0], m_state[3]), 23), m_state[0]);
-        const T t      = hn::ShiftLeftSame(m_state[1], 17);
+        const T result = hn::Add(rotl<23>(hn::Add(m_state[0], m_state[3])), m_state[0]);
+        const T t      = hn::ShiftLeft<17>(m_state[1]);
         //
         m_state[2] = hn::Xor(m_state[2], m_state[0]);
         m_state[3] = hn::Xor(m_state[3], m_state[1]);
         m_state[1] = hn::Xor(m_state[1], m_state[2]);
         m_state[0] = hn::Xor(m_state[0], m_state[3]);
         m_state[2] = hn::Xor(m_state[2], t);
-        m_state[3] = rotl(m_state[3], 45);
+        m_state[3] = rotl<45>(m_state[3]);
         return result;
     }
 };

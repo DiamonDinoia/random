@@ -29,6 +29,7 @@ class XoshiroPlusPlus {
     inline constexpr XoshiroPlusPlus& operator=(XoshiroPlusPlus&& other) noexcept      = default;
     //
     inline constexpr std::uint64_t operator()() noexcept { return next(); }
+    inline constexpr double        uniform() noexcept { return static_cast<double>(next() >> 11) * 0x1.0p-53; }
     //
     constexpr std::array<std::uint64_t, 4> getState() const { return {m_state[0], m_state[1], m_state[2], m_state[3]}; }
     //
@@ -80,9 +81,9 @@ class XoshiroPlusPlus {
         std::uint64_t s1 = 0;
         std::uint64_t s2 = 0;
         std::uint64_t s3 = 0;
-        for (unsigned long i : JUMP)
-            for (int b = 0; b < 64; b++) {
-                if (i & UINT64_C(1) << b) {
+        for (auto i : JUMP)
+            for (auto b = 0; b < 64; b++) {
+                if (i & std::uint64_t{1} << b) {
                     s0 ^= m_state[0];
                     s1 ^= m_state[1];
                     s2 ^= m_state[2];
