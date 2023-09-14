@@ -91,7 +91,7 @@ class vectorXoshiroPlusPlus {
         return hn::Or(hn::ShiftLeft<k>(x), hn::ShiftRight<64 - k>(x));
     }
 
-    T next() noexcept {
+    constexpr T next() noexcept {
         namespace hn   = hwy::HWY_NAMESPACE;
         const T result = hn::Add(rotl<23>(hn::Add(m_state[0], m_state[3])), m_state[0]);
         const T t      = hn::ShiftLeft<17>(m_state[1]);

@@ -55,14 +55,16 @@ CPMAddPackage(
 CPMAddPackage(
         NAME Benchmark
         GIT_REPOSITORY https://github.com/google/benchmark.git
-        VERSION 1.7.1
+        VERSION 1.8.3
         GIT_SHALLOW YES
         GIT_PROGRESS YES
         EXCLUDE_FROM_ALL YES
         SYSTEM YES
         OPTIONS
         "BENCHMARK_ENABLE_TESTNG Off"
-        "BENCHMARK_USE_LIBCXX On"
+        "BENCHMARK_USE_LIBCXX Off"
+        "HAVE_STD_REGEX On"
+        "RUN_HAVE_STD_REGEX ON"
 )
 
 
