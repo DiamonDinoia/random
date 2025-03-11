@@ -7,6 +7,7 @@ CPMAddPackage(
         EXCLUDE_FROM_ALL YES
         SYSTEM
 )
+
 include(CTest)
 enable_testing()
 
@@ -17,21 +18,16 @@ file(DOWNLOAD https://prng.di.unimi.it/splitmix64.c ${TEST_INCLUDE_DIR}/splitmix
 file(DOWNLOAD https://prng.di.unimi.it/xoshiro256plusplus.c ${TEST_INCLUDE_DIR}/xoshiro256plusplus.c)
 
 add_executable(testSplitMix split_mix_tests.cpp)
-target_link_libraries(testSplitMix PRIVATE vectorXoshiro Catch2::Catch2 benchmark::benchmark)
+target_link_libraries(testSplitMix PRIVATE vectorXoshiro Catch2::Catch2)
 target_include_directories(testSplitMix PRIVATE SYSTEM ${TEST_INCLUDE_DIR})
 add_test(NAME testSplitMix COMMAND testSplitMix)
 
 add_executable(testXoshiro test_xoshiro.cpp)
-target_link_libraries(testXoshiro PRIVATE vectorXoshiro Catch2::Catch2 benchmark::benchmark)
+target_link_libraries(testXoshiro PRIVATE vectorXoshiro Catch2::Catch2)
 target_include_directories(testXoshiro PRIVATE SYSTEM ${TEST_INCLUDE_DIR})
 add_test(NAME testXoshiro COMMAND testXoshiro)
 
-add_executable(testSplitMixVector testVectorSplitMix64.cpp)
-target_link_libraries(testSplitMixVector PRIVATE vectorXoshiro Catch2::Catch2 benchmark::benchmark)
-target_include_directories(testSplitMixVector PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-add_test(NAME testSplitMixVector COMMAND testSplitMixVector)
-
-add_executable(testVectorXoshiroPlusPlus testVectorXoshiroPlusPlus.cpp)
-target_link_libraries(testVectorXoshiroPlusPlus PRIVATE vectorXoshiro Catch2::Catch2 benchmark::benchmark)
-target_include_directories(testVectorXoshiroPlusPlus PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-add_test(NAME testVectorXoshiroPlusPlus COMMAND testVectorXoshiroPlusPlus)
+add_executable(testVectorXoshiro test_vector_xoshiro.cpp)
+target_link_libraries(testVectorXoshiro PRIVATE vectorXoshiro Catch2::Catch2)
+target_include_directories(testVectorXoshiro PRIVATE SYSTEM ${TEST_INCLUDE_DIR})
+add_test(NAME testVectorXoshiro COMMAND testVectorXoshiro)
