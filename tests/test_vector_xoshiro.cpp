@@ -101,16 +101,3 @@ TEST_CASE("GENERATE DOUBLE", "[xoshiro256++]") {
   }
 }
 
-// TEST_CASE("BENCHMARK GENERATE UINT64", "[xoshiro256++]") {
-//   const auto seed = std::random_device()();
-//   INFO("SEED: " << seed);
-//   xoshiro::VectorXoshiro rng(seed);
-//   xoshiro::Xoshiro reference(seed);
-//   rng();
-//   BENCHMARK("VectorXoshiro") {
-//     return rng();
-//   };
-//   BENCHMARK("ScalarXoshiro") {
-//     return reference();
-//   };
-// }
