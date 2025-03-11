@@ -9,6 +9,12 @@ int main() {
   xoshiro::Xoshiro reference(seed);
   std::uniform_real_distribution double_dist(0.0, 1.0);
   std::mt19937_64 mt(seed);
+
+
+  rng.populate_cache();
+  auto x = rng();
+  std::cout << "x: " << x << '\n';
+
   using ankerl::nanobench::doNotOptimizeAway;
   ankerl::nanobench::Bench().minEpochIterations(10854354)
     .run("Vector Xorshiro UINT64", [&] {

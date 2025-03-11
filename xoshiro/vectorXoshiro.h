@@ -77,10 +77,43 @@ private:
   std::array<std::uint64_t, 1024> m_cache;
   std::size_t m_index;
 
-  constexpr simd_type next() noexcept {
-    const simd_type result = rotl(m_state[0] + m_state[3], 23) + m_state[0];
-    //
-    const simd_type t = m_state[1] << 17;
+  // Define a SIMD type alias based on available extensions.
+#ifdef __AVX512F__
+  using simd_u64 = __m512i;
+#elif defined(__AVX2__)
+  using simd_u64 = __m256i;
+#elif defined(__SSE2__)
+  using simd_u64 = __m128i;
+#else
+#error "No supported SIMD extensions available."
+#endif
+
+  // Constant rotate left for 64-bit lanes.
+  // Shift must be a compile-time constant in [0, 63].
+  template <int Shift>
+  inline simd_u64 rotl_u64(const simd_u64 x) {
+    static_assert(Shift >= 0 && Shift < 64, "Shift must be in [0, 63]");
+#if defined(__AVX512F__)
+#if defined(__AVX512BITALG__)
+    // Use the dedicated AVX-512 BITALG rotate instruction.
+    return _mm512_rol_epi64(x, Shift);
+#else
+    // Fallback: combine shifts and OR.
+    return _mm512_or_si512(_mm512_slli_epi64(x, Shift),
+                           _mm512_srli_epi64(x, 64 - Shift));
+#endif
+#elif defined(__AVX2__)
+    return _mm256_or_si256(_mm256_slli_epi64(x, Shift),
+                           _mm256_srli_epi64(x, 64 - Shift));
+#elif defined(__SSE2__)
+    return _mm_or_si128(_mm_slli_epi64(x, Shift),
+                        _mm_srli_epi64(x, 64 - Shift));
+#endif
+  }
+
+  constexpr auto next() noexcept {
+    const auto result = rotl_u64<23>(m_state[0] + m_state[3]) + m_state[0];
+    const auto t = m_state[1] << 17;
 
     m_state[2] ^= m_state[0];
     m_state[3] ^= m_state[1];
@@ -89,19 +122,19 @@ private:
 
     m_state[2] ^= t;
 
-    m_state[3] = rotl(m_state[3], 45);
+    m_state[3] = rotl_u64<45>(m_state[3]);
 
     return result;
   }
 
+public:
   constexpr void populate_cache() noexcept {
-    for (auto i = 0UL; i < 1024; i+=SIMD_WIDTH) {
+    for (auto i = 0UL; i < 1024UL; i+=SIMD_WIDTH) {
       next().store_aligned(m_cache.data() + i);
     }
     m_index = 0;
   }
 
-public:
   /* This is the jump function for the generator. It is equivalent
  to 2^128 calls to next(); it can be used to generate 2^128
  non-overlapping subsequences for parallel computations. */
