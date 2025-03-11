@@ -108,25 +108,26 @@ public:
   constexpr void jump() noexcept {
     constexpr std::uint64_t JUMP[] = {0x180ec6d33cfd0aba, 0xd5a61266f0c9392c,
                                       0xa9582618e03fc9aa, 0x39abdc4529b1661c};
-
-    simd_type s0(0);
-    simd_type s1(0);
-    simd_type s2(0);
-    simd_type s3(0);
-    for (const auto i : JUMP)
-      for (auto b = 0; b < 64; b++) {
-        if (i & std::uint64_t{1} << b) {
-          s0 ^= m_state[0];
-          s1 ^= m_state[1];
-          s2 ^= m_state[2];
-          s3 ^= m_state[3];
+    for (auto i = 0; i < SIMD_WIDTH; ++i) {
+      simd_type s0(0);
+      simd_type s1(0);
+      simd_type s2(0);
+      simd_type s3(0);
+      for (const auto i : JUMP)
+        for (auto b = 0; b < 64; b++) {
+          if (i & std::uint64_t{1} << b) {
+            s0 ^= m_state[0];
+            s1 ^= m_state[1];
+            s2 ^= m_state[2];
+            s3 ^= m_state[3];
+          }
+          next();
         }
-        next();
-      }
-    m_state[0] = s0;
-    m_state[1] = s1;
-    m_state[2] = s2;
-    m_state[3] = s3;
+      m_state[0] = s0;
+      m_state[1] = s1;
+      m_state[2] = s2;
+      m_state[3] = s3;
+    }
   }
 
   /* This is the long-jump function for the generator. It is equivalent to

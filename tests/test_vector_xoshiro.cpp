@@ -24,14 +24,16 @@ TEST_CASE("JUMP", "[xoshiro256++]") {
   INFO("SEED: " << seed);
   xoshiro::Xoshiro reference(seed);
   xoshiro::VectorXoshiro rng(seed);
-  for (auto i = 1U; i < xoshiro::VectorXoshiro::SIMD_WIDTH; ++i) {
+  REQUIRE(rng.getState(0) == reference.getState());
+  for (auto i = 1UL; i < xoshiro::VectorXoshiro::SIMD_WIDTH; ++i) {
     reference.jump();
+    REQUIRE(rng.getState(i) == reference.getState());
   }
   rng.jump();
   for (auto i = 0U; i < xoshiro::VectorXoshiro::SIMD_WIDTH; ++i) {
     INFO( "i: " << i);
-    REQUIRE(rng.getState(i) == reference.getState());
     reference.jump();
+    REQUIRE(rng.getState(i) == reference.getState());
   }
 }
 
@@ -98,3 +100,17 @@ TEST_CASE("GENERATE DOUBLE", "[xoshiro256++]") {
     }
   }
 }
+
+// TEST_CASE("BENCHMARK GENERATE UINT64", "[xoshiro256++]") {
+//   const auto seed = std::random_device()();
+//   INFO("SEED: " << seed);
+//   xoshiro::VectorXoshiro rng(seed);
+//   xoshiro::Xoshiro reference(seed);
+//   rng();
+//   BENCHMARK("VectorXoshiro") {
+//     return rng();
+//   };
+//   BENCHMARK("ScalarXoshiro") {
+//     return reference();
+//   };
+// }
