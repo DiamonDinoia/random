@@ -51,9 +51,9 @@ endif ()
 
 add_library(vectorXoshiro INTERFACE)
 target_include_directories(vectorXoshiro INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
-target_compile_features(vectorXoshiro INTERFACE cxx_std_17) # This means at least C++17
+target_compile_features(vectorXoshiro INTERFACE cxx_std_20) # This means at least C++17
 target_link_libraries(vectorXoshiro INTERFACE xsimd)
-target_compile_options(vectorXoshiro INTERFACE -fimplicit-constexpr)
+#target_compile_options(vectorXoshiro INTERFACE -fimplicit-constexpr)
 if (ENABLE_TESTS)
     add_subdirectory(tests)
 endif ()

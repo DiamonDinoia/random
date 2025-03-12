@@ -1,6 +1,7 @@
-#include <xoshiro/vectorXoshiro.h>
+#include <iostream>
 #include <nanobench.h>
 #include <random>
+#include <xoshiro/vectorXoshiro.h>
 
 int main() {
   const auto seed = std::random_device()();

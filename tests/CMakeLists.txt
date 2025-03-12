@@ -41,7 +41,7 @@ add_executable(testVectorXoshiro test_vector_xoshiro.cpp)
 target_link_libraries(testVectorXoshiro PRIVATE vectorXoshiro Catch2::Catch2)
 target_include_directories(testVectorXoshiro PRIVATE SYSTEM ${TEST_INCLUDE_DIR})
 add_test(NAME testVectorXoshiro COMMAND testVectorXoshiro)
-
+target_compile_options(testVectorXoshiro PRIVATE -march=native)
 
 add_executable(benchmarks benchmarks.cpp)
 target_link_libraries(benchmarks PRIVATE vectorXoshiro nanobench)
