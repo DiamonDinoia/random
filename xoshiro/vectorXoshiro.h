@@ -8,19 +8,18 @@
 
 #include "xoshiro.hpp"
 
-#include <iostream>
-
 namespace xoshiro {
 
 class VectorXoshiro {
   using result_type = std::uint64_t;
   using simd_type = xsimd::simd_type<result_type>;
-  static constexpr auto RNG_WIDTH = 4U;
-
+  static constexpr auto RNG_WIDTH = UINT8_C(4);
+  static constexpr auto CACHE_SIZE = UINT8_C(64);
 public:
   static constexpr auto SIMD_WIDTH = xsimd::simd_type<result_type>::size;
+  __attribute__ ((noinline))
   constexpr explicit VectorXoshiro(const std::uint64_t seed) noexcept
-      : m_state{}, m_cache{}, m_index(1024) {
+      : m_state{}, m_cache{}, m_index(CACHE_SIZE) {
     Xoshiro rng{seed};
     std::array<std::array<std::uint64_t, SIMD_WIDTH>, RNG_WIDTH> states{};
     for (auto i = 0UL; i < SIMD_WIDTH; ++i) {
@@ -29,7 +28,7 @@ public:
       }
       rng.jump();
     }
-    for (auto i = 0UL; i < RNG_WIDTH; ++i) {
+    for (auto i = UINT8_C(0); i < RNG_WIDTH; ++i) {
       m_state[i] = simd_type::load_unaligned(states[i].data());
     }
   }
@@ -37,13 +36,13 @@ public:
   constexpr explicit VectorXoshiro(const std::uint64_t seed,
                                    const std::uint64_t thread_id) noexcept
       : VectorXoshiro(seed) {
-    for (auto i = UINT64_C(0); i < thread_id; ++i) {
+    for (auto i = UINT8_C(0); i < thread_id; ++i) {
       jump();
     }
   }
 
   constexpr std::uint64_t operator()() noexcept {
-    if (m_index == 1024) {
+    if (m_index == CACHE_SIZE) [[unlikely]] {
       populate_cache();
     }
     return m_cache[m_index++];
@@ -55,7 +54,7 @@ public:
 
   constexpr auto getState(const std::size_t index) const {
     std::array<std::uint64_t, RNG_WIDTH> state{};
-    for (auto i = 0UL; i < RNG_WIDTH; ++i) {
+    for (auto i = UINT8_C(0); i < RNG_WIDTH; ++i) {
       state[i] = m_state[i].get(index);
     }
     return state;
@@ -72,15 +71,13 @@ public:
   static constexpr std::uint64_t stateSize() noexcept { return RNG_WIDTH; }
 
 private:
+  alignas(simd_type::arch_type::alignment()) std::array<std::uint64_t, CACHE_SIZE> m_cache;
   std::array<simd_type, RNG_WIDTH> m_state;
-
-  std::array<std::uint64_t, 1024> m_cache;
   std::size_t m_index;
 
-  constexpr simd_type next() noexcept {
-    const simd_type result = rotl(m_state[0] + m_state[3], 23) + m_state[0];
-    //
-    const simd_type t = m_state[1] << 17;
+  __always_inline constexpr auto next() noexcept {
+    const auto result = rotl(m_state[0] + m_state[3], 23) + m_state[0];
+    const auto t = m_state[1] << 17;
 
     m_state[2] ^= m_state[0];
     m_state[3] ^= m_state[1];
@@ -94,8 +91,9 @@ private:
     return result;
   }
 
-  constexpr void populate_cache() noexcept {
-    for (auto i = 0UL; i < 1024; i+=SIMD_WIDTH) {
+  __attribute__ ((noinline)) constexpr void populate_cache() noexcept {
+#pragma GCC unroll (CACHE_SIZE/SIMD_WIDTH) ivdep
+    for (auto i = UINT8_C(0); i < CACHE_SIZE; i+=SIMD_WIDTH) {
       next().store_aligned(m_cache.data() + i);
     }
     m_index = 0;
@@ -108,7 +106,7 @@ public:
   constexpr void jump() noexcept {
     constexpr std::uint64_t JUMP[] = {0x180ec6d33cfd0aba, 0xd5a61266f0c9392c,
                                       0xa9582618e03fc9aa, 0x39abdc4529b1661c};
-    for (auto i = 0; i < SIMD_WIDTH; ++i) {
+    for (auto _ = UINT8_C(0); _ < SIMD_WIDTH; ++_) {
       simd_type s0(0);
       simd_type s1(0);
       simd_type s2(0);

@@ -1,9 +1,10 @@
-#include <xoshiro/vectorXoshiro.h>
+#include <iostream>
 #include <nanobench.h>
 #include <random>
+#include <xoshiro/vectorXoshiro.h>
 
 int main() {
-  const auto seed = std::random_device()();
+  const auto seed = 42;
   std::cout << "SEED: " << seed << std::endl;
   xoshiro::VectorXoshiro rng(seed);
   xoshiro::Xoshiro reference(seed);

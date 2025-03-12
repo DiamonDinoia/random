@@ -39,7 +39,6 @@ CPMAddPackage(
         EXCLUDE_FROM_ALL YES
 )
 
-
 if (CMAKE_BUILD_TYPE MATCHES Debug)
     add_compile_options(-fstack-protector-all)
     add_compile_options(-Wall -Wextra -pedantic -fno-omit-frame-pointer -g -O0)
