@@ -8,6 +8,8 @@
 
 #include "xoshiro.hpp"
 
+#include <variant>
+
 namespace xoshiro {
 
 namespace internal {
@@ -21,6 +23,7 @@ private:
   static constexpr auto RNG_WIDTH = UINT8_C(4);
   static constexpr auto CACHE_SIZE = UINT8_C(64);
   static constexpr auto SIMD_WIDTH = simd_type::size;
+  static_assert(SIMD_WIDTH != 0, "SIMD width must be non-zero");
 public:
   __attribute__ ((noinline))
   constexpr explicit VectorXoshiroImpl(const std::uint64_t seed) noexcept
@@ -175,63 +178,53 @@ using VectorXoshiroNative = internal::VectorXoshiroImpl<xsimd::best_arch>;
 
 class VectorXoshiro {
 public:
-explicit VectorXoshiro(std::uint64_t seed);
-__always_inline std::uint64_t operator()() noexcept { return (*pImpl)(); }
-__always_inline double uniform() noexcept { return pImpl->uniform(); }
-__always_inline void jump() noexcept { pImpl->jump(); }
-__always_inline void long_jump() noexcept { pImpl->long_jump(); }
+  explicit VectorXoshiro(std::uint64_t seed);
+
+  // Dispatch member calls via std::visit.
+  __always_inline std::uint64_t operator()() noexcept {
+    return std::visit([](auto &impl) { return impl(); }, *impl_);
+  }
+  __always_inline double uniform() noexcept {
+    return std::visit([](auto &impl) { return impl.uniform(); }, *impl_);
+  }
+  __always_inline void jump() noexcept {
+    std::visit([](auto &impl) { impl.jump(); }, *impl_);
+  }
+  __always_inline void long_jump() noexcept {
+    std::visit([](auto &impl) { impl.long_jump(); }, *impl_);
+  }
 
 private:
-  // Abstract interface to hide the templated implementation.
-  struct IVectorXoshiro {
-    virtual ~IVectorXoshiro() = default;
-    virtual std::uint64_t operator()() noexcept = 0;
-    virtual double uniform() noexcept = 0;
-    virtual void jump() noexcept = 0;
-    virtual void long_jump() noexcept = 0;
-  };
-
-  // Templated wrapper that delegates to internal::VectorXoshiroImpl<Arch>.
-  template <class Arch>
-  class ImplWrapper : public IVectorXoshiro {
-    internal::VectorXoshiroImpl<Arch> impl;
-  public:
-    explicit ImplWrapper(std::uint64_t seed) : impl(seed) { }
-    __always_inline std::uint64_t operator()() noexcept final { return impl(); }
-    __always_inline double uniform() noexcept final { return impl.uniform(); }
-    __always_inline void jump() noexcept final { impl.jump(); }
-    __always_inline void long_jump() noexcept final { impl.long_jump(); }
-  };
-
-  std::unique_ptr<IVectorXoshiro> pImpl;
-  // Friend declaration for the external factory function.
-  friend std::unique_ptr<IVectorXoshiro> create_vector_xoshiro_impl(std::uint64_t seed);
+  // Define the variant over all supported implementations.
+  using ImplVariant = std::variant<internal::VectorXoshiroImpl<xsimd::avx512f>,
+                                   internal::VectorXoshiroImpl<xsimd::avx2>,
+                                   internal::VectorXoshiroImpl<xsimd::sse4_2>,
+                                   internal::VectorXoshiroImpl<xsimd::sse2>>;
+  std::unique_ptr<ImplVariant> impl_;
   friend internal::VectorXoshiroCreator;
+  static std::unique_ptr<ImplVariant>  create_vector_xoshiro_impl(std::uint64_t seed);
 };
-
-// Extern function declaration.
-std::unique_ptr<VectorXoshiro::IVectorXoshiro> create_vector_xoshiro_impl(std::uint64_t seed);
 
 namespace internal {
 
 // Functor used by xsimd::dispatch.
 // It receives an architecture tag and returns a pointer to the corresponding implementation.
 struct VectorXoshiroCreator {
-  std::uint64_t seed;
+  const std::uint64_t seed;
   template <class Arch>
-  std::unique_ptr<VectorXoshiro::IVectorXoshiro> operator()(Arch) const;
+  std::unique_ptr<VectorXoshiro::ImplVariant> operator()(Arch) const;
 };
 
 
 template <class Arch>
-std::unique_ptr<VectorXoshiro::IVectorXoshiro> VectorXoshiroCreator::operator()(Arch) const {
-  return std::make_unique<VectorXoshiro::ImplWrapper<Arch>>(seed);
+std::unique_ptr<VectorXoshiro::ImplVariant> VectorXoshiroCreator::operator()(Arch) const {
+  return std::make_unique<VectorXoshiro::ImplVariant>(internal::VectorXoshiroImpl<Arch>{seed});
 }
 
-extern template std::unique_ptr<VectorXoshiro::IVectorXoshiro> VectorXoshiroCreator::operator()<xsimd::sse2>(xsimd::sse2) const;
-extern template std::unique_ptr<VectorXoshiro::IVectorXoshiro> VectorXoshiroCreator::operator()<xsimd::sse4_2>(xsimd::sse4_2) const;
-extern template std::unique_ptr<VectorXoshiro::IVectorXoshiro> VectorXoshiroCreator::operator()<xsimd::avx2>(xsimd::avx2) const;
-extern template std::unique_ptr<VectorXoshiro::IVectorXoshiro> VectorXoshiroCreator::operator()<xsimd::avx512f>(xsimd::avx512f) const;
+extern template std::unique_ptr<VectorXoshiro::ImplVariant> VectorXoshiroCreator::operator()<xsimd::sse2>(xsimd::sse2) const;
+extern template std::unique_ptr<VectorXoshiro::ImplVariant> VectorXoshiroCreator::operator()<xsimd::sse4_2>(xsimd::sse4_2) const;
+extern template std::unique_ptr<VectorXoshiro::ImplVariant> VectorXoshiroCreator::operator()<xsimd::avx2>(xsimd::avx2) const;
+extern template std::unique_ptr<VectorXoshiro::ImplVariant> VectorXoshiroCreator::operator()<xsimd::avx512f>(xsimd::avx512f) const;
 
 }
 
