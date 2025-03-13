@@ -48,11 +48,23 @@ if (CMAKE_BUILD_TYPE MATCHES Release)
     add_compile_options(-O3)
 endif ()
 
-add_library(vectorXoshiro INTERFACE)
-target_include_directories(vectorXoshiro INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
-target_compile_features(vectorXoshiro INTERFACE cxx_std_17) # This means at least C++17
-target_link_libraries(vectorXoshiro INTERFACE xsimd)
-target_compile_options(vectorXoshiro INTERFACE -fimplicit-constexpr)
+add_library(vectorXoshiro STATIC src/xoshiro.cpp)
+target_include_directories(vectorXoshiro PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_compile_features(vectorXoshiro PRIVATE cxx_std_17) # This means at least C++17
+target_link_libraries(vectorXoshiro PUBLIC xsimd)
+target_compile_options(vectorXoshiro PRIVATE -fimplicit-constexpr -fdevirtualize-at-ltrans -fipa-pta -fvisibility=hidden)
+
+set(SIMD_LIBS "")
+foreach(MARCH_VERSION IN ITEMS x86-64 x86-64-v2 x86-64-v3 x86-64-v4)
+    string(REPLACE "-" "_" TARGET_SUFFIX "${MARCH_VERSION}")
+    add_library(simd_source_${TARGET_SUFFIX} OBJECT src/xoshiro_simd.cpp)
+    target_include_directories(simd_source_${TARGET_SUFFIX} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_link_libraries(simd_source_${TARGET_SUFFIX} PRIVATE xsimd)
+    target_compile_options(simd_source_${TARGET_SUFFIX} PRIVATE -march=${MARCH_VERSION})
+    list(APPEND SIMD_LIBS $<TARGET_OBJECTS:simd_source_${TARGET_SUFFIX}>)
+endforeach()
+target_sources(vectorXoshiro PRIVATE ${SIMD_LIBS})
+
 if (ENABLE_TESTS)
     add_subdirectory(tests)
 endif ()

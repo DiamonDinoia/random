@@ -51,14 +51,13 @@ public:
 
 private:
   std::uint64_t m_state[4];
-  //
-  static constexpr std::uint64_t rotl(const std::uint64_t x, int k) noexcept {
+
+  __always_inline static constexpr std::uint64_t rotl(const std::uint64_t x, int k) noexcept {
     return (x << k) | (x >> (64 - k));
   }
-  //
+
   constexpr std::uint64_t next() noexcept {
     const std::uint64_t result = rotl(m_state[0] + m_state[3], 23) + m_state[0];
-    //
     const std::uint64_t t = m_state[1] << 17;
 
     m_state[2] ^= m_state[0];
