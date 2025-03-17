@@ -187,7 +187,7 @@ public:
 
   explicit VectorXoshiro(result_type seed);
 
-   constexpr result_type operator()() noexcept {
+   result_type operator()() noexcept {
     if (m_index == CACHE_SIZE) [[unlikely]] {
       pImpl->populate_cache();
       m_index = 0;
@@ -195,10 +195,10 @@ public:
     return m_cache[m_index++];
   }
 
-   constexpr double uniform() noexcept { return static_cast<double>(operator()() >> 11) * 0x1.0p-53; }
+   double uniform() noexcept { return static_cast<double>(operator()() >> 11) * 0x1.0p-53; }
 
-  void constexpr jump() noexcept { pImpl->jump(); }
-  void constexpr long_jump() noexcept { pImpl->long_jump(); }
+  void jump() noexcept { pImpl->jump(); }
+  void long_jump() noexcept { pImpl->long_jump(); }
 
 private:
   // Abstract interface to hide the templated implementation.
@@ -206,7 +206,7 @@ private:
 
   struct IVectorXoshiro {
     virtual ~IVectorXoshiro() = default;
-     virtual void populate_cache() noexcept = 0;
+    virtual void populate_cache() noexcept = 0;
     virtual void jump() noexcept = 0;
     virtual void long_jump() noexcept = 0;
   };
