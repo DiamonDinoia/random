@@ -50,9 +50,10 @@ endif ()
 
 add_library(vectorXoshiro STATIC src/xoshiro.cpp)
 target_include_directories(vectorXoshiro PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_compile_features(vectorXoshiro PRIVATE cxx_std_17) # This means at least C++17
+target_compile_features(vectorXoshiro PRIVATE cxx_std_20) # This means at least C++17
 target_link_libraries(vectorXoshiro PUBLIC xsimd)
-target_compile_options(vectorXoshiro PRIVATE -fimplicit-constexpr -fdevirtualize-at-ltrans -fipa-pta -fvisibility=hidden -march=x86-64 -mtune=generic)
+target_compile_options(vectorXoshiro PRIVATE -fdevirtualize-at-ltrans -fipa-pta -fvisibility=hidden)
+target_compile_options(vectorXoshiro PRIVATE -fimplicit-constexpr)
 
 set(SIMD_LIBS "")
 foreach(MARCH_VERSION IN ITEMS x86-64 x86-64-v2 x86-64-v3 x86-64-v4)

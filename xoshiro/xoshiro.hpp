@@ -3,6 +3,9 @@
 #include <array>
 #include <cstdint>
 #include <limits>
+#include <bit>
+
+#include <xsimd/xsimd.hpp>
 
 #include "splitMix64.hpp"
 
@@ -31,14 +34,11 @@ public:
   }
 
   constexpr std::array<std::uint64_t, 4> getState() const {
-    return {m_state[0], m_state[1], m_state[2], m_state[3]};
+    return m_state;
   }
 
-  constexpr void setState(std::array<std::uint64_t, 4> state) noexcept {
-    m_state[0] = state[0];
-    m_state[1] = state[1];
-    m_state[2] = state[2];
-    m_state[3] = state[3];
+  constexpr void setState(std::array<std::uint64_t, 4>&& state) noexcept {
+    m_state = state;
   }
 
   static constexpr std::uint64_t min() noexcept {
@@ -50,27 +50,36 @@ public:
   static constexpr std::uint64_t stateSize() noexcept { return 4; }
 
 private:
-  std::uint64_t m_state[4];
-
+  using simd_type = xsimd::make_sized_batch_t<std::uint64_t, 2>;
+   union {
+    std::array<std::uint64_t, 4> m_state;
+    std::array<simd_type, 2> m_vec;
+  };
   __always_inline static constexpr std::uint64_t rotl(const std::uint64_t x, int k) noexcept {
     return (x << k) | (x >> (64 - k));
   }
 
-  constexpr std::uint64_t next() noexcept {
-    const std::uint64_t result = rotl(m_state[0] + m_state[3], 23) + m_state[0];
-    const std::uint64_t t = m_state[1] << 17;
+  std::uint64_t next() noexcept {
+    // Compute the shift constant and the output result.
+    const auto t_shift = m_state[1] << 17;
+    const auto result = rotl(m_state[0] + m_state[3], 23) + m_state[0];
 
-    m_state[2] ^= m_state[0];
-    m_state[3] ^= m_state[1];
-    m_state[1] ^= m_state[2];
-    m_state[0] ^= m_state[3];
-
-    m_state[2] ^= t;
-
+    if constexpr (std::is_void_v<simd_type>) {
+      // Scalar branch: update state with sequential XOR operations.
+      m_state[2] ^= m_state[0];
+      m_state[3] ^= m_state[1];
+      m_state[0] ^= m_state[3];
+      m_state[1] ^= m_state[2];
+    } else {
+      m_vec[1] = m_vec[1] ^ m_vec[0];
+      m_vec[0] ^= simd_type{m_state[3], m_state[2]};
+    }
+    m_state[2] ^= t_shift;
     m_state[3] = rotl(m_state[3], 45);
 
     return result;
   }
+
 
 public:
   /* This is the jump function for the generator. It is equivalent
@@ -79,7 +88,6 @@ public:
   constexpr void jump() noexcept {
     constexpr std::uint64_t JUMP[] = {0x180ec6d33cfd0aba, 0xd5a61266f0c9392c,
                                       0xa9582618e03fc9aa, 0x39abdc4529b1661c};
-    //
     std::uint64_t s0 = 0;
     std::uint64_t s1 = 0;
     std::uint64_t s2 = 0;

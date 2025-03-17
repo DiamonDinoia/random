@@ -23,7 +23,7 @@ public:
 protected:
   using simd_type = xsimd::batch<result_type, Arch>;
   static constexpr auto RNG_WIDTH = static_cast<std::uint_fast8_t>(4);
-  static constexpr auto CACHE_SIZE = static_cast<std::uint_fast8_t>(64);
+  static constexpr auto CACHE_SIZE = static_cast<std::uint_fast8_t>(255);
   static constexpr auto SIMD_WIDTH = static_cast<std::uint_fast8_t>(simd_type::size);
 
 public:
@@ -78,7 +78,7 @@ public:
 
 private:
   // m_cache is now a reference; it must outlive this object.
-  alignas(simd_type::arch_type::alignment()) std::array<std::uint64_t, CACHE_SIZE> &m_cache;
+  std::array<std::uint64_t, CACHE_SIZE> &m_cache;
   std::array<simd_type, RNG_WIDTH> m_state;
   std::uint_fast8_t m_index;
 
@@ -173,10 +173,9 @@ struct VectorXoshiroCreator;
 class VectorXoshiroNative : public internal::VectorXoshiroImpl<xsimd::best_arch> {
 public:
   using VectorXoshiroImpl::VectorXoshiroImpl;
-  explicit VectorXoshiroNative(const result_type seed) noexcept : m_cache{}, VectorXoshiroImpl(seed, m_cache) {}
-
+  explicit VectorXoshiroNative(const result_type seed) noexcept : VectorXoshiroImpl(seed, m_cache) {}
 private:
-  alignas(simd_type::arch_type::alignment()) std::array<result_type, CACHE_SIZE> m_cache;
+  alignas(simd_type::arch_type::alignment()) std::array<result_type, CACHE_SIZE> m_cache{};
 };
 
 class VectorXoshiro {
@@ -191,18 +190,18 @@ public:
     return m_cache[m_index++];
   }
   __always_inline constexpr double uniform() noexcept { return static_cast<double>(operator()() >> 11) * 0x1.0p-53; }
-  __always_inline void jump() noexcept { pImpl->jump(); }
-  __always_inline void long_jump() noexcept { pImpl->long_jump(); }
+  void jump() noexcept { pImpl->jump(); }
+  void long_jump() noexcept { pImpl->long_jump(); }
 
 private:
   // Abstract interface to hide the templated implementation.
   static constexpr auto CACHE_SIZE = internal::VectorXoshiroImpl<xsimd::default_arch>::CACHE_SIZE;
 
   struct IVectorXoshiro {
-    virtual ~IVectorXoshiro() = default;
-    virtual void populate_cache() noexcept = 0;
-    virtual void jump() noexcept = 0;
-    virtual void long_jump() noexcept = 0;
+    __always_inline virtual ~IVectorXoshiro() = default;
+    __always_inline virtual void populate_cache() noexcept = 0;
+    __always_inline virtual void jump() noexcept = 0;
+    __always_inline virtual void long_jump() noexcept = 0;
   };
 
   // Templated wrapper that delegates to internal::VectorXoshiroImpl<Arch>.
