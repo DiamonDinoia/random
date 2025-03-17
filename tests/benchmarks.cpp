@@ -6,7 +6,7 @@
 
 static constexpr auto iterations = 1;
 int main() {
-  const auto seed = 42;
+  const auto seed = 1;
   std::cout << "SEED: " << seed << std::endl;
   xoshiro::VectorXoshiroNative rng(seed);
   xoshiro::Xoshiro reference(seed);
@@ -14,11 +14,11 @@ int main() {
   std::uniform_real_distribution double_dist(0.0, 1.0);
   std::mt19937_64 mt(seed);
   using ankerl::nanobench::doNotOptimizeAway;
-  ankerl::nanobench::Bench().minEpochIterations(1 << 25)
+  ankerl::nanobench::Bench().minEpochIterations(1 << 20)
     .run("Vector Xorshiro UINT64", [&] {
      for (int i = 0; i < iterations; ++i) doNotOptimizeAway( rng());
   }).run("Scalar Xorshiro UINT64", [&] {
-       for (int i = 0; i < iterations; ++i) doNotOptimizeAway(reference());
+     for (int i = 0; i < iterations; ++i) doNotOptimizeAway(reference());
   }).run("Dispatch Xorshiro UINT64", [&] {
      for (int i = 0; i < iterations; ++i) doNotOptimizeAway(dispatch());
   }).run("MersenneTwister UINT64", [&] {
@@ -33,6 +33,8 @@ int main() {
      for (int i = 0; i < iterations; ++i) doNotOptimizeAway(double_dist(rng));
   }).run("Scalar Xorshiro std::random<double>", [&] {
      for (int i = 0; i < iterations; ++i) doNotOptimizeAway(double_dist(reference));
+  }).run("Dispatch Xorshiro std::random<double>", [&] {
+     for (int i = 0; i < iterations; ++i) doNotOptimizeAway(double_dist(dispatch));
   }).run("MersenneTwister std::random<double>", [&] {
      for (int i = 0; i < iterations; ++i) doNotOptimizeAway(double_dist(mt));
   });

@@ -50,7 +50,7 @@ public:
 private:
     std::array<std::uint64_t, 4> m_state;
 
-  __always_inline static constexpr std::uint64_t rotl(const std::uint64_t x, int k) noexcept {
+  static constexpr std::uint64_t rotl(const std::uint64_t x, int k) noexcept {
     return (x << k) | (x >> (64 - k));
   }
 
