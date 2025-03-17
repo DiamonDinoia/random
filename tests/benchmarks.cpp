@@ -14,7 +14,7 @@ int main() {
   std::uniform_real_distribution double_dist(0.0, 1.0);
   std::mt19937_64 mt(seed);
   using ankerl::nanobench::doNotOptimizeAway;
-  ankerl::nanobench::Bench().minEpochIterations(16777)
+  ankerl::nanobench::Bench().minEpochIterations(1 << 25)
     .run("Vector Xorshiro UINT64", [&] {
      for (int i = 0; i < iterations; ++i) doNotOptimizeAway( rng());
   }).run("Scalar Xorshiro UINT64", [&] {
