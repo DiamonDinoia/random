@@ -1,5 +1,7 @@
 #pragma once
 
+#include "vectorXoshiro.hpp"
+
 #include <array>
 #include <cstdint>
 #include <limits>
@@ -10,21 +12,25 @@
 
 namespace xoshiro {
 
+class VectorXoshiro;
+
 namespace internal {
 
-template<class Arch>
-class VectorXoshiroImpl {
+template <class Arch> class VectorXoshiroImpl {
 public:
   using result_type = std::uint64_t;
-private:
+
+protected:
   using simd_type = xsimd::batch<result_type, Arch>;
-  static constexpr auto RNG_WIDTH = UINT8_C(4);
-  static constexpr auto CACHE_SIZE = UINT8_C(64);
-  static constexpr auto SIMD_WIDTH = simd_type::size;
+  static constexpr auto RNG_WIDTH = static_cast<std::uint_fast8_t>(4);
+  static constexpr auto CACHE_SIZE = static_cast<std::uint_fast8_t>(64);
+  static constexpr auto SIMD_WIDTH = static_cast<std::uint_fast8_t>(simd_type::size);
+
 public:
-  __attribute__ ((noinline))
-  constexpr explicit VectorXoshiroImpl(const std::uint64_t seed) noexcept
-      : m_state{}, m_cache{}, m_index(CACHE_SIZE) {
+  // Constructor: cache is provided externally by reference.
+  __attribute__((noinline)) constexpr explicit VectorXoshiroImpl(const std::uint64_t seed,
+                                                                 std::array<std::uint64_t, CACHE_SIZE> &cache) noexcept
+      : m_cache(cache), m_state{}, m_index(CACHE_SIZE) {
     Xoshiro rng{seed};
     std::array<std::array<std::uint64_t, SIMD_WIDTH>, RNG_WIDTH> states{};
     for (auto i = 0UL; i < SIMD_WIDTH; ++i) {
@@ -38,9 +44,10 @@ public:
     }
   }
 
-  constexpr explicit VectorXoshiroImpl(const std::uint64_t seed,
-                                   const std::uint64_t thread_id) noexcept
-      : VectorXoshiroImpl(seed) {
+  // Additional constructor with thread_id; also requires a cache reference.
+  constexpr explicit VectorXoshiroImpl(const std::uint64_t seed, const std::uint64_t thread_id,
+                                       std::array<std::uint64_t, CACHE_SIZE> &cache) noexcept
+      : VectorXoshiroImpl(seed, cache) {
     for (auto i = UINT8_C(0); i < thread_id; ++i) {
       jump();
     }
@@ -53,9 +60,7 @@ public:
     return m_cache[m_index++];
   }
 
-  constexpr double uniform() noexcept {
-    return static_cast<double>(operator()() >> 11) * 0x1.0p-53;
-  }
+  constexpr double uniform() noexcept { return static_cast<double>(operator()() >> 11) * 0x1.0p-53; }
 
   constexpr auto getState(const std::size_t index) const {
     std::array<std::uint64_t, RNG_WIDTH> state{};
@@ -65,20 +70,17 @@ public:
     return state;
   }
 
-  static constexpr result_type(min)() noexcept {
-    return (std::numeric_limits<result_type>::min)();
-  }
+  static constexpr result_type(min)() noexcept { return (std::numeric_limits<result_type>::min)(); }
 
-  static constexpr result_type(max)() noexcept {
-    return (std::numeric_limits<result_type>::max)();
-  }
+  static constexpr result_type(max)() noexcept { return (std::numeric_limits<result_type>::max)(); }
 
   static constexpr std::uint64_t stateSize() noexcept { return RNG_WIDTH; }
 
 private:
-  alignas(simd_type::arch_type::alignment()) std::array<std::uint64_t, CACHE_SIZE> m_cache;
+  // m_cache is now a reference; it must outlive this object.
+  alignas(simd_type::arch_type::alignment()) std::array<std::uint64_t, CACHE_SIZE> &m_cache;
   std::array<simd_type, RNG_WIDTH> m_state;
-  std::size_t m_index;
+  std::uint_fast8_t m_index;
 
   __always_inline constexpr auto next() noexcept {
     const auto result = rotl(m_state[0] + m_state[3], 23) + m_state[0];
@@ -96,25 +98,24 @@ private:
     return result;
   }
 
-  // Unrolled function template
-  template <size_t... Is>
-  __always_inline constexpr void unroll_populate(std::index_sequence<Is...>) noexcept {
-    // Fold expression to unroll the loop
+  // Unrolled loop to populate the cache.
+  template <size_t... Is> __always_inline constexpr void unroll_populate(std::index_sequence<Is...>) noexcept {
     ((next().store_aligned(m_cache.data() + Is * SIMD_WIDTH)), ...);
   }
 
-  __attribute__ ((noinline)) constexpr void populate_cache() noexcept {
+  __attribute__((noinline)) constexpr void populate_cache() noexcept {
     unroll_populate(std::make_index_sequence<CACHE_SIZE / SIMD_WIDTH>{});
     m_index = 0;
   }
 
+  friend VectorXoshiro;
+
 public:
   /* This is the jump function for the generator. It is equivalent
- to 2^128 calls to next(); it can be used to generate 2^128
- non-overlapping subsequences for parallel computations. */
+     to 2^128 calls to next(); it can be used to generate 2^128
+     non-overlapping subsequences for parallel computations. */
   constexpr void jump() noexcept {
-    constexpr std::uint64_t JUMP[] = {0x180ec6d33cfd0aba, 0xd5a61266f0c9392c,
-                                      0xa9582618e03fc9aa, 0x39abdc4529b1661c};
+    constexpr std::uint64_t JUMP[] = {0x180ec6d33cfd0aba, 0xd5a61266f0c9392c, 0xa9582618e03fc9aa, 0x39abdc4529b1661c};
     for (auto _ = UINT8_C(0); _ < SIMD_WIDTH; ++_) {
       simd_type s0(0);
       simd_type s1(0);
@@ -138,13 +139,12 @@ public:
   }
 
   /* This is the long-jump function for the generator. It is equivalent to
- 2^192 calls to next(); it can be used to generate 2^64 starting points,
- from each of which jump() will generate 2^64 non-overlapping
- subsequences for parallel distributed computations. */
+     2^192 calls to next(); it can be used to generate 2^64 starting points,
+     from each of which jump() will generate 2^64 non-overlapping
+     subsequences for parallel distributed computations. */
   constexpr void long_jump() noexcept {
-    constexpr std::uint64_t LONG_JUMP[] = {
-      0x76e15d3efefdcbbf, 0xc5004e441c522fb3, 0x77710069854ee241,
-      0x39109bb02acbe635};
+    constexpr std::uint64_t LONG_JUMP[] = {0x76e15d3efefdcbbf, 0xc5004e441c522fb3, 0x77710069854ee241,
+                                           0x39109bb02acbe635};
     simd_type s0(0);
     simd_type s1(0);
     simd_type s2(0);
@@ -168,71 +168,89 @@ public:
 
 struct VectorXoshiroCreator;
 
-}
+} // namespace internal
 
+class VectorXoshiroNative : public internal::VectorXoshiroImpl<xsimd::best_arch> {
+public:
+  using VectorXoshiroImpl::VectorXoshiroImpl;
+  explicit VectorXoshiroNative(const result_type seed) noexcept : m_cache{}, VectorXoshiroImpl(seed, m_cache) {}
 
-using VectorXoshiroNative = internal::VectorXoshiroImpl<xsimd::best_arch>;
+private:
+  alignas(simd_type::arch_type::alignment()) std::array<result_type, CACHE_SIZE> m_cache;
+};
 
 class VectorXoshiro {
 public:
-explicit VectorXoshiro(std::uint64_t seed);
-__always_inline std::uint64_t operator()() noexcept { return (*pImpl)(); }
-__always_inline double uniform() noexcept { return pImpl->uniform(); }
-__always_inline void jump() noexcept { pImpl->jump(); }
-__always_inline void long_jump() noexcept { pImpl->long_jump(); }
+  using result_type = internal::VectorXoshiroImpl<xsimd::best_arch>::result_type;
+  explicit VectorXoshiro(std::uint64_t seed);
+  __always_inline constexpr std::uint64_t operator()() noexcept {
+    if (m_index == CACHE_SIZE) [[unlikely]] {
+      pImpl->populate_cache();
+      m_index = 0;
+    }
+    return m_cache[m_index++];
+  }
+  __always_inline constexpr double uniform() noexcept { return static_cast<double>(operator()() >> 11) * 0x1.0p-53; }
+  __always_inline void jump() noexcept { pImpl->jump(); }
+  __always_inline void long_jump() noexcept { pImpl->long_jump(); }
 
 private:
   // Abstract interface to hide the templated implementation.
+  static constexpr auto CACHE_SIZE = internal::VectorXoshiroImpl<xsimd::default_arch>::CACHE_SIZE;
+
   struct IVectorXoshiro {
     virtual ~IVectorXoshiro() = default;
-    virtual std::uint64_t operator()() noexcept = 0;
-    virtual double uniform() noexcept = 0;
+    virtual void populate_cache() noexcept = 0;
     virtual void jump() noexcept = 0;
     virtual void long_jump() noexcept = 0;
   };
 
   // Templated wrapper that delegates to internal::VectorXoshiroImpl<Arch>.
-  template <class Arch>
-  class ImplWrapper : public IVectorXoshiro {
+  template <class Arch> class ImplWrapper : public IVectorXoshiro {
     internal::VectorXoshiroImpl<Arch> impl;
+
   public:
-    explicit ImplWrapper(std::uint64_t seed) : impl(seed) { }
-    __always_inline std::uint64_t operator()() noexcept final { return impl(); }
-    __always_inline double uniform() noexcept final { return impl.uniform(); }
+    explicit ImplWrapper(std::uint64_t seed, std::array<result_type, CACHE_SIZE> &cache) : impl(seed, cache) {}
+    __always_inline void populate_cache() noexcept final { impl.populate_cache(); }
     __always_inline void jump() noexcept final { impl.jump(); }
     __always_inline void long_jump() noexcept final { impl.long_jump(); }
   };
 
+  alignas(xsimd::avx512f::alignment()) std::array<result_type, CACHE_SIZE> m_cache;
   std::unique_ptr<IVectorXoshiro> pImpl;
+  std::uint_fast8_t m_index;
   // Friend declaration for the external factory function.
-  friend std::unique_ptr<IVectorXoshiro> create_vector_xoshiro_impl(std::uint64_t seed);
+  friend std::unique_ptr<IVectorXoshiro> create_vector_xoshiro_impl(std::uint64_t seed, std::array<result_type, CACHE_SIZE> & cache);
   friend internal::VectorXoshiroCreator;
 };
 
 // Extern function declaration.
-std::unique_ptr<VectorXoshiro::IVectorXoshiro> create_vector_xoshiro_impl(std::uint64_t seed);
+std::unique_ptr<VectorXoshiro::IVectorXoshiro> create_vector_xoshiro_impl(std::uint64_t seed, std::array<VectorXoshiro::result_type, VectorXoshiro::CACHE_SIZE>& cache);
 
 namespace internal {
 
 // Functor used by xsimd::dispatch.
-// It receives an architecture tag and returns a pointer to the corresponding implementation.
+// It receives an architecture tag and returns a pointer to the corresponding
+// implementation.
 struct VectorXoshiroCreator {
   std::uint64_t seed;
-  template <class Arch>
-  std::unique_ptr<VectorXoshiro::IVectorXoshiro> operator()(Arch) const;
+  std::array<VectorXoshiro::result_type, VectorXoshiro::CACHE_SIZE> &cache;
+  template <class Arch> std::unique_ptr<VectorXoshiro::IVectorXoshiro> operator()(Arch) const;
 };
 
-
-template <class Arch>
-std::unique_ptr<VectorXoshiro::IVectorXoshiro> VectorXoshiroCreator::operator()(Arch) const {
-  return std::make_unique<VectorXoshiro::ImplWrapper<Arch>>(seed);
+template <class Arch> std::unique_ptr<VectorXoshiro::IVectorXoshiro> VectorXoshiroCreator::operator()(Arch) const {
+  return std::make_unique<VectorXoshiro::ImplWrapper<Arch>>(seed, cache);
 }
 
-extern template std::unique_ptr<VectorXoshiro::IVectorXoshiro> VectorXoshiroCreator::operator()<xsimd::sse2>(xsimd::sse2) const;
-extern template std::unique_ptr<VectorXoshiro::IVectorXoshiro> VectorXoshiroCreator::operator()<xsimd::sse4_2>(xsimd::sse4_2) const;
-extern template std::unique_ptr<VectorXoshiro::IVectorXoshiro> VectorXoshiroCreator::operator()<xsimd::avx2>(xsimd::avx2) const;
-extern template std::unique_ptr<VectorXoshiro::IVectorXoshiro> VectorXoshiroCreator::operator()<xsimd::avx512f>(xsimd::avx512f) const;
+extern template std::unique_ptr<VectorXoshiro::IVectorXoshiro>
+VectorXoshiroCreator::operator()<xsimd::sse2>(xsimd::sse2) const;
+extern template std::unique_ptr<VectorXoshiro::IVectorXoshiro>
+VectorXoshiroCreator::operator()<xsimd::sse4_2>(xsimd::sse4_2) const;
+extern template std::unique_ptr<VectorXoshiro::IVectorXoshiro>
+VectorXoshiroCreator::operator()<xsimd::avx2>(xsimd::avx2) const;
+extern template std::unique_ptr<VectorXoshiro::IVectorXoshiro>
+VectorXoshiroCreator::operator()<xsimd::avx512f>(xsimd::avx512f) const;
 
-}
+} // namespace internal
 
 } // namespace xoshiro

@@ -45,5 +45,5 @@ add_test(NAME testVectorXoshiro COMMAND testVectorXoshiro)
 
 add_executable(benchmarks benchmarks.cpp)
 target_link_libraries(benchmarks PRIVATE vectorXoshiro nanobench)
-target_compile_options(benchmarks PRIVATE -fwhole-program)
+target_compile_options(benchmarks PRIVATE -fwhole-program -fimplicit-constexpr -fdevirtualize-at-ltrans -fipa-pta -fvisibility=hidden)
 set_property(TARGET benchmarks PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
