@@ -25,8 +25,8 @@ public:
 protected:
   using simd_type = xsimd::batch<result_type, Arch>;
   static constexpr auto RNG_WIDTH = static_cast<std::uint8_t>(4);
-  static constexpr auto CACHE_SIZE = std::numeric_limits<std::uint8_t>::max();
   static constexpr auto SIMD_WIDTH = static_cast<std::uint8_t>(simd_type::size);
+  static constexpr auto CACHE_SIZE = std::uint16_t{std::numeric_limits<std::uint8_t>::max()+1};
 public:
   // Constructor: cache is provided externally by reference.
   constexpr explicit VectorXoshiroImpl(const result_type seed, std::array<result_type, CACHE_SIZE> &cache) noexcept
@@ -74,7 +74,7 @@ private:
   // m_cache is now a reference; it must outlive this object.
   alignas(simd_type::arch_type::alignment()) std::array<result_type, CACHE_SIZE> &m_cache;
   std::array<simd_type, RNG_WIDTH> m_state;
-  std::decay_t<decltype(CACHE_SIZE)> m_index;
+  std::uint8_t m_index;
 
   constexpr auto next() noexcept {
     const auto result = rotl(m_state[0] + m_state[3], 23) + m_state[0];
@@ -97,7 +97,7 @@ private:
     ((next().store_aligned(m_cache.data() + Is * SIMD_WIDTH)), ...);
   }
 
-  constexpr void populate_cache() noexcept { unroll_populate(std::make_index_sequence<(CACHE_SIZE+SIMD_WIDTH-1) / SIMD_WIDTH>{}); }
+  constexpr void populate_cache() noexcept { unroll_populate(std::make_index_sequence<CACHE_SIZE / SIMD_WIDTH>{}); }
 
   friend VectorXoshiro;
 
@@ -214,7 +214,7 @@ private:
 
   alignas(xsimd::avx512f::alignment()) std::array<result_type, CACHE_SIZE> m_cache;
   std::unique_ptr<IVectorXoshiro> pImpl;
-  std::decay_t<decltype(CACHE_SIZE)> m_index;
+  std::uint8_t m_index;
   // Friend declaration for the external factory function.
   friend std::unique_ptr<IVectorXoshiro> create_vector_xoshiro_impl(result_type seed,
                                                                     std::array<result_type, CACHE_SIZE> &cache);

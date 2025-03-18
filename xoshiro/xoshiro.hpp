@@ -3,7 +3,6 @@
 #include <array>
 #include <cstdint>
 #include <limits>
-#include <bit>
 
 #include "splitMix64.hpp"
 
