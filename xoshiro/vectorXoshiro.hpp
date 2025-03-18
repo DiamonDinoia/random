@@ -22,11 +22,13 @@ public:
   static constexpr result_type(min)() noexcept { return (std::numeric_limits<result_type>::min)(); }
   static constexpr result_type(max)() noexcept { return (std::numeric_limits<result_type>::max)(); }
   static constexpr result_type stateSize() noexcept { return RNG_WIDTH; }
+
 protected:
   using simd_type = xsimd::batch<result_type, Arch>;
-  static constexpr auto RNG_WIDTH = static_cast<std::uint8_t>(4);
-  static constexpr auto SIMD_WIDTH = static_cast<std::uint8_t>(simd_type::size);
-  static constexpr auto CACHE_SIZE = std::uint16_t{std::numeric_limits<std::uint8_t>::max()+1};
+  static constexpr auto RNG_WIDTH = std::uint8_t{4};
+  static constexpr auto SIMD_WIDTH = std::uint8_t{simd_type::size};
+  static constexpr auto CACHE_SIZE = std::uint16_t{std::numeric_limits<std::uint8_t>::max() + 1};
+
 public:
   // Constructor: cache is provided externally by reference.
   constexpr explicit VectorXoshiroImpl(const result_type seed, std::array<result_type, CACHE_SIZE> &cache) noexcept
