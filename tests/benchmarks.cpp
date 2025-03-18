@@ -4,9 +4,9 @@
 #include <xoshiro/vectorXoshiro.hpp>
 
 
-static constexpr auto iterations = 8;
+static constexpr auto iterations = 16;
 int main() {
-  const auto seed = 42;
+  volatile const auto seed = 42;
   std::cout << "SEED: " << seed << std::endl;
   xoshiro::VectorXoshiroNative rng(seed);
   xoshiro::Xoshiro reference(seed);

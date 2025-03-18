@@ -19,18 +19,18 @@ namespace internal {
 template <class Arch> class VectorXoshiroImpl {
 public:
   using result_type = std::uint64_t;
-
+  static constexpr result_type(min)() noexcept { return (std::numeric_limits<result_type>::min)(); }
+  static constexpr result_type(max)() noexcept { return (std::numeric_limits<result_type>::max)(); }
+  static constexpr result_type stateSize() noexcept { return RNG_WIDTH; }
 protected:
   using simd_type = xsimd::batch<result_type, Arch>;
   static constexpr auto RNG_WIDTH = static_cast<std::uint8_t>(4);
-  static constexpr auto CACHE_SIZE = static_cast<std::uint8_t>(255);
+  static constexpr auto CACHE_SIZE = std::numeric_limits<std::uint8_t>::max();
   static constexpr auto SIMD_WIDTH = static_cast<std::uint8_t>(simd_type::size);
-
 public:
   // Constructor: cache is provided externally by reference.
-  constexpr explicit VectorXoshiroImpl(const result_type seed,
-                                                                 std::array<result_type, CACHE_SIZE> &cache) noexcept
-      : m_cache(cache), m_state{}, m_index(CACHE_SIZE) {
+  constexpr explicit VectorXoshiroImpl(const result_type seed, std::array<result_type, CACHE_SIZE> &cache) noexcept
+      : m_cache(cache), m_state{}, m_index{0} {
     Xoshiro rng{seed};
     std::array<std::array<result_type, SIMD_WIDTH>, RNG_WIDTH> states{};
     for (auto i = 0UL; i < SIMD_WIDTH; ++i) {
@@ -54,7 +54,7 @@ public:
   }
 
   constexpr result_type operator()() noexcept {
-    if (m_index == CACHE_SIZE) [[unlikely]] {
+    if (m_index == 0) [[unlikely]] {
       populate_cache();
     }
     return m_cache[m_index++];
@@ -70,19 +70,13 @@ public:
     return state;
   }
 
-  static constexpr result_type(min)() noexcept { return (std::numeric_limits<result_type>::min)(); }
-
-  static constexpr result_type(max)() noexcept { return (std::numeric_limits<result_type>::max)(); }
-
-  static constexpr result_type stateSize() noexcept { return RNG_WIDTH; }
-
 private:
   // m_cache is now a reference; it must outlive this object.
   alignas(simd_type::arch_type::alignment()) std::array<result_type, CACHE_SIZE> &m_cache;
   std::array<simd_type, RNG_WIDTH> m_state;
   std::decay_t<decltype(CACHE_SIZE)> m_index;
 
-   constexpr auto next() noexcept {
+  constexpr auto next() noexcept {
     const auto result = rotl(m_state[0] + m_state[3], 23) + m_state[0];
     const auto t = m_state[1] << 17;
 
@@ -99,14 +93,11 @@ private:
   }
 
   // Unrolled loop to populate the cache.
-  template <size_t... Is>  constexpr void unroll_populate(std::index_sequence<Is...>) noexcept {
+  template <size_t... Is> constexpr void unroll_populate(std::index_sequence<Is...>) noexcept {
     ((next().store_aligned(m_cache.data() + Is * SIMD_WIDTH)), ...);
   }
 
-  constexpr void populate_cache() noexcept {
-    unroll_populate(std::make_index_sequence<CACHE_SIZE / SIMD_WIDTH>{});
-    m_index = 0;
-  }
+  constexpr void populate_cache() noexcept { unroll_populate(std::make_index_sequence<(CACHE_SIZE+SIMD_WIDTH-1) / SIMD_WIDTH>{}); }
 
   friend VectorXoshiro;
 
@@ -173,10 +164,10 @@ struct VectorXoshiroCreator;
 class VectorXoshiroNative : public internal::VectorXoshiroImpl<xsimd::best_arch> {
 public:
   using VectorXoshiroImpl::VectorXoshiroImpl;
-  explicit VectorXoshiroNative(const result_type seed) noexcept : m_cache{}, VectorXoshiroImpl(seed, m_cache) {}
+  explicit VectorXoshiroNative(const result_type seed) noexcept : VectorXoshiroImpl(seed, m_cache) {}
 
 private:
-  alignas(simd_type::arch_type::alignment()) std::array<result_type, CACHE_SIZE> m_cache;
+  alignas(simd_type::arch_type::alignment()) std::array<result_type, CACHE_SIZE> m_cache{};
 };
 
 class VectorXoshiro {
@@ -187,15 +178,14 @@ public:
 
   explicit VectorXoshiro(result_type seed);
 
-   result_type operator()() noexcept {
-    if (m_index == CACHE_SIZE) [[unlikely]] {
+  result_type operator()() noexcept {
+    if (m_index == 0) [[unlikely]] {
       pImpl->populate_cache();
-      m_index = 0;
     }
     return m_cache[m_index++];
   }
 
-   double uniform() noexcept { return static_cast<double>(operator()() >> 11) * 0x1.0p-53; }
+  double uniform() noexcept { return static_cast<double>(operator()() >> 11) * 0x1.0p-53; }
 
   void jump() noexcept { pImpl->jump(); }
   void long_jump() noexcept { pImpl->long_jump(); }
@@ -217,7 +207,7 @@ private:
 
   public:
     explicit ImplWrapper(result_type seed, std::array<result_type, CACHE_SIZE> &cache) : impl(seed, cache) {}
-     void populate_cache() noexcept final { impl.populate_cache(); }
+    void populate_cache() noexcept final { impl.populate_cache(); }
     void jump() noexcept final { impl.jump(); }
     void long_jump() noexcept final { impl.long_jump(); }
   };

@@ -14,7 +14,7 @@ create_vector_xoshiro_impl(VectorXoshiro::result_type seed,
 }
 
 // Definitions of VectorXoshiro's member functions.
-VectorXoshiro::VectorXoshiro(result_type seed)
-    : m_cache{}, pImpl{create_vector_xoshiro_impl(seed, m_cache)}, m_index{CACHE_SIZE} {}
+VectorXoshiro::VectorXoshiro(const result_type seed)
+    : m_cache{}, pImpl{create_vector_xoshiro_impl(seed, m_cache)}, m_index{0} {}
 
 } // namespace xoshiro
