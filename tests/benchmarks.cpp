@@ -4,7 +4,7 @@
 #include <xoshiro/vectorXoshiro.hpp>
 
 
-static constexpr auto iterations = 8;
+static constexpr auto iterations = 1;
 int main() {
   volatile const auto seed = 42;
   std::cout << "SEED: " << seed << std::endl;

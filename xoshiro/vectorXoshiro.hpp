@@ -96,7 +96,7 @@ private:
 
   // Unrolled loop to populate the cache.
   template <size_t... Is> constexpr void unroll_populate(std::index_sequence<Is...>) noexcept {
-    ((next().store_aligned(m_cache.data() + Is * SIMD_WIDTH)), ...);
+    (next().store_aligned(m_cache.data() + Is * SIMD_WIDTH), ...);
   }
 
   constexpr void populate_cache() noexcept { unroll_populate(std::make_index_sequence<CACHE_SIZE / SIMD_WIDTH>{}); }
