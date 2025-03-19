@@ -39,30 +39,42 @@ CPMAddPackage(
         EXCLUDE_FROM_ALL YES
 )
 
-if (CMAKE_BUILD_TYPE MATCHES Debug)
-    add_compile_options(-fstack-protector-all)
-    add_compile_options(-Wall -Wextra -pedantic -fno-omit-frame-pointer -g -O0)
-
-endif ()
-if (CMAKE_BUILD_TYPE MATCHES Release)
-    add_compile_options(-O3)
-endif ()
+set(COMPILE_OPTIONS
+        $<$<CONFIG:Debug>:
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-fstack-protector-all -Wall -Wextra -pedantic -fno-omit-frame-pointer -g -O0>
+        $<$<CXX_COMPILER_ID:MSVC>:/W4 /Od /Zi>
+        >
+        $<$<CONFIG:Release>:
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-O3>
+        $<$<CXX_COMPILER_ID:MSVC>:/O2>
+        >
+        $<$<CONFIG:RelWithDebInfo>:
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-O2 -g>
+        $<$<CXX_COMPILER_ID:MSVC>:/O2 /Zi>
+        >
+        $<$<CONFIG:MinSizeRel>:
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Os>
+        $<$<CXX_COMPILER_ID:MSVC>:/O1>
+        >
+)
 
 add_library(vectorXoshiro STATIC src/xoshiro.cpp)
 target_include_directories(vectorXoshiro PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_features(vectorXoshiro PRIVATE cxx_std_17) # This means at least C++17
 target_link_libraries(vectorXoshiro PUBLIC xsimd)
+target_compile_options(vectorXoshiro PRIVATE ${COMPILE_OPTIONS})
 
-set(SIMD_LIBS "")
-foreach(MARCH_VERSION IN ITEMS x86-64 x86-64-v2 x86-64-v3 x86-64-v4)
+
+foreach (MARCH_VERSION IN ITEMS x86-64 x86-64-v2 x86-64-v3 x86-64-v4)
     string(REPLACE "-" "_" TARGET_SUFFIX "${MARCH_VERSION}")
-    add_library(simd_source_${TARGET_SUFFIX} OBJECT src/xoshiro_simd.cpp)
-    target_include_directories(simd_source_${TARGET_SUFFIX} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-    target_link_libraries(simd_source_${TARGET_SUFFIX} PRIVATE xsimd)
-    target_compile_options(simd_source_${TARGET_SUFFIX} PRIVATE -march=${MARCH_VERSION})
-    list(APPEND SIMD_LIBS $<TARGET_OBJECTS:simd_source_${TARGET_SUFFIX}>)
-endforeach()
-target_sources(vectorXoshiro PRIVATE ${SIMD_LIBS})
+    set(SIMD_SOURCE_TARGET "vector_xoshiro_simd_source_${TARGET_SUFFIX}")
+    add_library(${SIMD_SOURCE_TARGET} OBJECT src/xoshiro_simd.cpp)
+    target_include_directories(${SIMD_SOURCE_TARGET} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_link_libraries(${SIMD_SOURCE_TARGET} PRIVATE ${COMPILE_OPTIONS} xsimd)
+    target_compile_options(${SIMD_SOURCE_TARGET} PRIVATE -march=${MARCH_VERSION})
+    target_sources(vectorXoshiro PRIVATE $<TARGET_OBJECTS:${SIMD_SOURCE_TARGET}>)
+endforeach ()
+
 
 if (ENABLE_TESTS)
     add_subdirectory(tests)
