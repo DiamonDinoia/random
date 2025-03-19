@@ -89,18 +89,18 @@ Example output is:
 ``` 
 |               ns/op |                op/s |    err% |     total | benchmark
 |--------------------:|--------------------:|--------:|----------:|:----------
-|                1.64 |      608,409,415.30 |    0.3% |      0.02 | `Reference Xorshiro UINT64`
-|                1.51 |      660,321,505.94 |    1.8% |      0.02 | `Vector Xorshiro UINT64`
-|                0.93 |    1,071,886,459.17 |    0.3% |      0.01 | `Scalar Xorshiro UINT64`
-|                0.92 |    1,081,366,586.86 |    0.2% |      0.01 | `Dispatch Xorshiro UINT64`
-|                1.40 |      713,584,566.65 |    0.8% |      0.02 | `MersenneTwister UINT64`
-|                1.86 |      536,939,824.28 |    0.3% |      0.02 | `Vector Xorshiro DOUBLE`
-|                1.18 |      849,719,805.72 |    4.2% |      0.02 | `Scalar Xorshiro DOUBLE`
-|                1.19 |      839,624,610.43 |    1.1% |      0.02 | `Dispatch Xorshiro DOUBLE`
-|                6.53 |      153,221,543.16 |    0.9% |      0.08 | `Vector Xorshiro std::random<double>`
-|                5.30 |      188,583,167.48 |    0.2% |      0.07 | `Scalar Xorshiro std::random<double>`
-|                5.67 |      176,323,347.34 |    0.3% |      0.07 | `Dispatch Xorshiro std::random<double>`
-|                7.58 |      131,887,676.12 |    1.6% |      0.10 | `MersenneTwister std::random<double>`
+|                1.65 |      607,333,856.83 |    0.2% |      0.02 | `Reference Xorshiro UINT64`
+|                1.50 |      665,091,951.71 |    0.2% |      0.02 | `Vector Xorshiro UINT64`
+|                0.93 |    1,072,757,764.32 |    0.7% |      0.01 | `Scalar Xorshiro UINT64`
+|                0.93 |    1,078,351,966.36 |    2.4% |      0.01 | `Dispatch Xorshiro UINT64`
+|                1.42 |      704,563,839.87 |    0.7% |      0.02 | `MersenneTwister UINT64`
+|                1.87 |      534,621,401.64 |    0.7% |      0.02 | `Vector Xorshiro DOUBLE`
+|                1.18 |      849,308,111.65 |    0.6% |      0.01 | `Scalar Xorshiro DOUBLE`
+|                1.22 |      819,623,989.22 |    0.3% |      0.02 | `Dispatch Xorshiro DOUBLE`
+|                6.25 |      160,074,708.48 |    0.3% |      0.08 | `Vector Xorshiro std::random<double>`
+|                5.03 |      198,884,207.14 |    0.7% |      0.06 | `Scalar Xorshiro std::random<double>`
+|                5.22 |      191,530,832.60 |    2.1% |      0.07 | `Dispatch Xorshiro std::random<double>`
+|                7.30 |      137,077,929.14 |    2.9% |      0.09 | `MersenneTwister std::random<double>`
 ```
 
 

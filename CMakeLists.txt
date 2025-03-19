@@ -60,7 +60,6 @@ set(COMPILE_OPTIONS
 
 add_library(vectorXoshiro STATIC src/xoshiro.cpp)
 target_include_directories(vectorXoshiro PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_compile_features(vectorXoshiro PRIVATE cxx_std_17) # This means at least C++17
 target_link_libraries(vectorXoshiro PUBLIC xsimd)
 target_compile_options(vectorXoshiro PRIVATE ${COMPILE_OPTIONS})
 
@@ -79,3 +78,30 @@ endforeach ()
 if (ENABLE_TESTS)
     add_subdirectory(tests)
 endif ()
+
+include(CheckCXXCompilerFlag)
+
+# List candidate standards in descending order.
+set(CXX_STANDARDS "23" "20" "17")
+set(SUPPORTED_CXX_STANDARD "")
+
+foreach(std IN LISTS CXX_STANDARDS)
+    if(std STREQUAL "23")
+        set(flag "-std=c++23")
+    else()
+        set(flag "-std=c++${std}")
+    endif()
+    # Create a unique variable name for each check.
+    string(CONCAT var "COMPILER_SUPPORTS_CXX" std)
+    check_cxx_compiler_flag(${flag} ${var})
+    if(${var})
+        set(SUPPORTED_CXX_STANDARD ${std})
+        break()  # Use the highest supported standard.
+    endif()
+endforeach()
+
+if(NOT SUPPORTED_CXX_STANDARD)
+    message(FATAL_ERROR "The compiler does not support C++17 or higher.")
+endif()
+
+target_compile_features(vectorXoshiro PRIVATE cxx_std_${SUPPORTED_CXX_STANDARD})

@@ -6,6 +6,10 @@
 
 #include "splitMix64.hpp"
 
+#if __cplusplus >= 202002L
+#include <bit>
+#endif
+
 namespace xoshiro {
 
 /**
@@ -141,7 +145,13 @@ private:
    * @param k The number of bits to rotate.
    * @return The rotated integer.
    */
-  static constexpr auto rotl(const result_type x, const int k) noexcept { return (x << k) | (x >> (64 - k)); }
+  static constexpr auto rotl(const result_type x, const int k) noexcept {
+#if __cplusplus >= 202002L
+    return std::rotl(x, k);
+#else
+    return (x << k) | (x >> (64 - k));
+#endif
+  }
 
   /**
    * @brief Generates the next state of the generator.
