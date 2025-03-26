@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(XOSHIRO)
+project(XOSHIRO VERSION 0.1 LANGUAGES CXX)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_VERBOSE_MAKEFILE ON)
@@ -59,7 +59,11 @@ set(COMPILE_OPTIONS
 )
 
 add_library(vectorXoshiro STATIC src/xoshiro.cpp)
-target_include_directories(vectorXoshiro PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(vectorXoshiro PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
+)
+
 target_link_libraries(vectorXoshiro PUBLIC xsimd)
 target_compile_options(vectorXoshiro PRIVATE ${COMPILE_OPTIONS})
 
@@ -68,7 +72,7 @@ foreach (MARCH_VERSION IN ITEMS x86-64 x86-64-v2 x86-64-v3 x86-64-v4)
     string(REPLACE "-" "_" TARGET_SUFFIX "${MARCH_VERSION}")
     set(SIMD_SOURCE_TARGET "vector_xoshiro_simd_source_${TARGET_SUFFIX}")
     add_library(${SIMD_SOURCE_TARGET} OBJECT src/xoshiro_simd.cpp)
-    target_include_directories(${SIMD_SOURCE_TARGET} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_include_directories(${SIMD_SOURCE_TARGET} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
     target_link_libraries(${SIMD_SOURCE_TARGET} PRIVATE ${COMPILE_OPTIONS} xsimd)
     target_compile_options(${SIMD_SOURCE_TARGET} PRIVATE -march=${MARCH_VERSION})
     target_sources(vectorXoshiro PRIVATE $<TARGET_OBJECTS:${SIMD_SOURCE_TARGET}>)
@@ -105,3 +109,38 @@ if(NOT SUPPORTED_CXX_STANDARD)
 endif()
 
 target_compile_features(vectorXoshiro PRIVATE cxx_std_${SUPPORTED_CXX_STANDARD})
+
+
+# Installation rules
+install(TARGETS vectorXoshiro
+        EXPORT vectorXoshiroTargets
+        ARCHIVE DESTINATION lib
+        LIBRARY DESTINATION lib
+        RUNTIME DESTINATION bin
+)
+
+install(DIRECTORY include/ DESTINATION include)
+
+install(EXPORT vectorXoshiroTargets
+        FILE vectorXoshiroTargets.cmake
+        NAMESPACE vectorXoshiro::
+        DESTINATION lib/cmake/vectorXoshiro
+)
+
+include(CMakePackageConfigHelpers)
+write_basic_package_version_file(
+        "${CMAKE_CURRENT_BINARY_DIR}/vectorXoshiroConfigVersion.cmake"
+        VERSION ${PROJECT_VERSION}
+        COMPATIBILITY AnyNewerVersion
+)
+
+configure_file(vectorXoshiroConfig.cmake.in
+        "${CMAKE_CURRENT_BINARY_DIR}/vectorXoshiroConfig.cmake"
+        @ONLY
+)
+
+install(FILES
+        "${CMAKE_CURRENT_BINARY_DIR}/vectorXoshiroConfig.cmake"
+        "${CMAKE_CURRENT_BINARY_DIR}/vectorXoshiroConfigVersion.cmake"
+        DESTINATION lib/cmake/vectorXoshiro
+)
