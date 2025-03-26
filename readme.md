@@ -1,3 +1,5 @@
+# Warning: this project is still WIP the API might change in the future.
+
 ## Overview
 
 This project provides a set of utilities for random number generation using the Xoshiro family of algorithms.
