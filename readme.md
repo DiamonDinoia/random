@@ -38,13 +38,13 @@ EXAMPLE:
 ```cpp
 #include <xoshiro/xoshiro.hpp>
 
-xorshiro::Xoshiro rng(42, 1, 2); //Seed 42, Thread 1, Cluster 2
+xoshiro::Xoshiro rng(42, 1, 2); //Seed 42, Thread 1, Cluster 2
 // when using std::thread one can do:
-xorshiro::Xoshiro rng(42, std::this_thread::get_id();
+xoshiro::Xoshiro rng(42, std::this_thread::get_id();
 // OpenMP
-xorshiro::Xoshiro rng(42, omp_get_thread_num();
+xoshiro::Xoshiro rng(42, omp_get_thread_num();
 // OpenMP and MPI
-xorshiro::Xoshiro rng(42, omp_get_thread_num(), MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+xoshiro::Xoshiro rng(42, omp_get_thread_num(), MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     
 ```
 
@@ -109,17 +109,17 @@ Example output is:
 
 | ns/op |             op/s | err% | ins/op | cyc/op |   IPC | bra/op | miss% | total | benchmark                             
 |------:|-----------------:|-----:|-------:|-------:|------:|-------:|------:|------:|:--------------------------------------
-|  5.68 |   176,181,011.90 | 0.3% |  23.00 |  17.53 | 1.312 |   0.00 | 81.1% |  0.07 | Reference Xorshiro UINT64             
-|  1.13 |   884,115,030.37 | 1.1% |  12.52 |   3.50 | 3.580 |   1.01 |  0.4% |  0.01 | Vector Xorshiro UINT64                
-|  5.75 |   173,988,265.88 | 0.1% |  24.00 |  17.76 | 1.352 |   0.00 | 81.0% |  0.08 | Scalar Xorshiro UINT64                
-|  0.80 | 1,251,157,782.73 | 0.7% |   8.78 |   2.47 | 3.555 |   1.01 |  0.6% |  0.01 | Dispatch Xorshiro UINT64              
+|  5.68 |   176,181,011.90 | 0.3% |  23.00 |  17.53 | 1.312 |   0.00 | 81.1% |  0.07 | Reference Xoshiro UINT64             
+|  1.13 |   884,115,030.37 | 1.1% |  12.52 |   3.50 | 3.580 |   1.01 |  0.4% |  0.01 | Vector Xoshiro UINT64                
+|  5.75 |   173,988,265.88 | 0.1% |  24.00 |  17.76 | 1.352 |   0.00 | 81.0% |  0.08 | Scalar Xoshiro UINT64                
+|  0.80 | 1,251,157,782.73 | 0.7% |   8.78 |   2.47 | 3.555 |   1.01 |  0.6% |  0.01 | Dispatch Xoshiro UINT64              
 |  1.30 |   767,630,802.57 | 1.5% |  25.45 |   4.02 | 6.323 |   1.26 |  0.3% |  0.02 | MersenneTwister UINT64                
-|  1.54 |   648,787,513.41 | 1.2% |  18.52 |   4.76 | 3.889 |   1.01 |  0.4% |  0.02 | Vector Xorshiro DOUBLE                
-|  5.74 |   174,357,729.55 | 0.1% |  29.00 |  17.72 | 1.637 |   0.00 | 41.3% |  0.07 | Scalar Xorshiro DOUBLE                
-|  1.13 |   882,822,705.75 | 1.2% |  14.78 |   3.49 | 4.235 |   1.01 |  0.4% |  0.01 | Dispatch Xorshiro DOUBLE              
-|  6.55 |   152,688,649.59 | 0.2% |  31.52 |  20.23 | 1.558 |   3.51 | 14.4% |  0.08 | Vector Xorshiro std::random<double>   
-|  8.16 |   122,491,714.48 | 0.1% |  41.00 |  25.22 | 1.626 |   2.50 | 20.0% |  0.10 | Scalar Xorshiro std::random<double>   
-|  5.84 |   171,134,877.74 | 0.3% |  27.78 |  18.04 | 1.540 |   3.51 | 14.4% |  0.07 | Dispatch Xorshiro std::random<double> 
+|  1.54 |   648,787,513.41 | 1.2% |  18.52 |   4.76 | 3.889 |   1.01 |  0.4% |  0.02 | Vector Xoshiro DOUBLE                
+|  5.74 |   174,357,729.55 | 0.1% |  29.00 |  17.72 | 1.637 |   0.00 | 41.3% |  0.07 | Scalar Xoshiro DOUBLE                
+|  1.13 |   882,822,705.75 | 1.2% |  14.78 |   3.49 | 4.235 |   1.01 |  0.4% |  0.01 | Dispatch Xoshiro DOUBLE              
+|  6.55 |   152,688,649.59 | 0.2% |  31.52 |  20.23 | 1.558 |   3.51 | 14.4% |  0.08 | Vector Xoshiro std::random<double>   
+|  8.16 |   122,491,714.48 | 0.1% |  41.00 |  25.22 | 1.626 |   2.50 | 20.0% |  0.10 | Scalar Xoshiro std::random<double>   
+|  5.84 |   171,134,877.74 | 0.3% |  27.78 |  18.04 | 1.540 |   3.51 | 14.4% |  0.07 | Dispatch Xoshiro std::random<double> 
 |  7.74 |   129,189,841.55 | 0.3% |  41.46 |  23.90 | 1.734 |   3.76 | 13.5% |  0.10 | MersenneTwister std::random<double>   
 
 API Usage

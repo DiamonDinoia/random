@@ -21,27 +21,27 @@ int main() {
   std::mt19937_64 mt(seed);
   using ankerl::nanobench::doNotOptimizeAway;
   ankerl::nanobench::Bench().minEpochIterations(1 << 20)
-  .run("Reference Xorshiro UINT64", [&] {
+  .run("Reference Xoshiro UINT64", [&] {
      for (int i = 0; i < iterations; ++i) doNotOptimizeAway( next());
-  }).run("Vector Xorshiro UINT64", [&] {
+  }).run("Vector Xoshiro UINT64", [&] {
      for (int i = 0; i < iterations; ++i) doNotOptimizeAway( rng());
-  }).run("Scalar Xorshiro UINT64", [&] {
+  }).run("Scalar Xoshiro UINT64", [&] {
      for (int i = 0; i < iterations; ++i) doNotOptimizeAway(reference());
-  }).run("Dispatch Xorshiro UINT64", [&] {
+  }).run("Dispatch Xoshiro UINT64", [&] {
      for (int i = 0; i < iterations; ++i) doNotOptimizeAway(dispatch());
   }).run("MersenneTwister UINT64", [&] {
      for (int i = 0; i < iterations; ++i) doNotOptimizeAway(mt());
-  }).run("Vector Xorshiro DOUBLE", [&] {
+  }).run("Vector Xoshiro DOUBLE", [&] {
      for (int i = 0; i < iterations; ++i) doNotOptimizeAway(rng.uniform());
-  }).run("Scalar Xorshiro DOUBLE", [&] {
+  }).run("Scalar Xoshiro DOUBLE", [&] {
      for (int i = 0; i < iterations; ++i) doNotOptimizeAway(reference.uniform());
-  }).run("Dispatch Xorshiro DOUBLE", [&] {
+  }).run("Dispatch Xoshiro DOUBLE", [&] {
      for (int i = 0; i < iterations; ++i) doNotOptimizeAway(dispatch.uniform());
-  }).run("Vector Xorshiro std::random<double>", [&] {
+  }).run("Vector Xoshiro std::random<double>", [&] {
      for (int i = 0; i < iterations; ++i) doNotOptimizeAway(double_dist(rng));
-  }).run("Scalar Xorshiro std::random<double>", [&] {
+  }).run("Scalar Xoshiro std::random<double>", [&] {
      for (int i = 0; i < iterations; ++i) doNotOptimizeAway(double_dist(reference));
-  }).run("Dispatch Xorshiro std::random<double>", [&] {
+  }).run("Dispatch Xoshiro std::random<double>", [&] {
      for (int i = 0; i < iterations; ++i) doNotOptimizeAway(double_dist(dispatch));
   }).run("MersenneTwister std::random<double>", [&] {
      for (int i = 0; i < iterations; ++i) doNotOptimizeAway(double_dist(mt));

@@ -2,16 +2,12 @@ cmake_minimum_required(VERSION 3.16)
 
 project(XOSHIRO VERSION 0.1 LANGUAGES CXX)
 
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-set(CMAKE_VERBOSE_MAKEFILE ON)
-set(DCMAKE_RULE_MESSAGES OFF)
-
-# version of the libraries to be used
 set(CPM_DOWNLOAD_VERSION 0.40.6)
 set(XSIMD_DOWNLOAD_VERSION 13.2.0)
 
-option(GENERATE_SKIP "Generate skip table" OFF)
 option(ENABLE_TESTS "Enable tests" ON)
+option(ENABLE_PYTHON "Enable Python bindings" ON)
+
 
 if (CPM_SOURCE_CACHE)
     set(CPM_DOWNLOAD_LOCATION "${CPM_SOURCE_CACHE}/cpm/CPM_${CPM_DOWNLOAD_VERSION}.cmake")
@@ -38,35 +34,35 @@ CPMAddPackage(
         GIT_PROGRESS YES
         EXCLUDE_FROM_ALL YES
 )
-
-set(COMPILE_OPTIONS
-        $<$<CONFIG:Debug>:
-        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-fstack-protector-all -Wall -Wextra -pedantic -fno-omit-frame-pointer -g -O0>
-        $<$<CXX_COMPILER_ID:MSVC>:/W4 /Od /Zi>
-        >
-        $<$<CONFIG:Release>:
-        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-O3>
-        $<$<CXX_COMPILER_ID:MSVC>:/O2>
-        >
-        $<$<CONFIG:RelWithDebInfo>:
-        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-O2 -g>
-        $<$<CXX_COMPILER_ID:MSVC>:/O2 /Zi>
-        >
-        $<$<CONFIG:MinSizeRel>:
-        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Os>
-        $<$<CXX_COMPILER_ID:MSVC>:/O1>
-        >
-)
+#
+#set(COMPILE_OPTIONS
+#        $<$<CONFIG:Debug>:
+#        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-fstack-protector-all -Wall -Wextra -pedantic -fno-omit-frame-pointer -g -O0>
+#        $<$<CXX_COMPILER_ID:MSVC>:/W4 /Od /Zi>
+#        >
+#        $<$<CONFIG:Release>:
+#        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-O3>
+#        $<$<CXX_COMPILER_ID:MSVC>:/O2>
+#        >
+#        $<$<CONFIG:RelWithDebInfo>:
+#        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-O2 -g>
+#        $<$<CXX_COMPILER_ID:MSVC>:/O2 /Zi>
+#        >
+#        $<$<CONFIG:MinSizeRel>:
+#        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Os>
+#        $<$<CXX_COMPILER_ID:MSVC>:/O1>
+#        >
+#)
 
 add_library(vectorXoshiro STATIC src/xoshiro.cpp)
 target_include_directories(vectorXoshiro PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-    $<INSTALL_INTERFACE:include>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<INSTALL_INTERFACE:include>
 )
 
 target_link_libraries(vectorXoshiro PUBLIC xsimd)
 target_compile_options(vectorXoshiro PRIVATE ${COMPILE_OPTIONS})
-
+set_target_properties(vectorXoshiro PROPERTIES CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 foreach (MARCH_VERSION IN ITEMS x86-64 x86-64-v2 x86-64-v3 x86-64-v4)
     string(REPLACE "-" "_" TARGET_SUFFIX "${MARCH_VERSION}")
@@ -89,58 +85,62 @@ include(CheckCXXCompilerFlag)
 set(CXX_STANDARDS "23" "20" "17")
 set(SUPPORTED_CXX_STANDARD "")
 
-foreach(std IN LISTS CXX_STANDARDS)
-    if(std STREQUAL "23")
+foreach (std IN LISTS CXX_STANDARDS)
+    if (std STREQUAL "23")
         set(flag "-std=c++23")
-    else()
+    else ()
         set(flag "-std=c++${std}")
-    endif()
+    endif ()
     # Create a unique variable name for each check.
     string(CONCAT var "COMPILER_SUPPORTS_CXX" std)
     check_cxx_compiler_flag(${flag} ${var})
-    if(${var})
+    if (${var})
         set(SUPPORTED_CXX_STANDARD ${std})
         break()  # Use the highest supported standard.
-    endif()
-endforeach()
+    endif ()
+endforeach ()
 
-if(NOT SUPPORTED_CXX_STANDARD)
+if (NOT SUPPORTED_CXX_STANDARD)
     message(FATAL_ERROR "The compiler does not support C++17 or higher.")
-endif()
+endif ()
 
 target_compile_features(vectorXoshiro PRIVATE cxx_std_${SUPPORTED_CXX_STANDARD})
 
+if (ENABLE_PYTHON)
+    add_subdirectory(python)
+else ()
+    # Installation rules
+    install(TARGETS vectorXoshiro
+            EXPORT vectorXoshiroTargets
+            ARCHIVE DESTINATION lib
+            LIBRARY DESTINATION lib
+            RUNTIME DESTINATION bin
+    )
 
-# Installation rules
-install(TARGETS vectorXoshiro
-        EXPORT vectorXoshiroTargets
-        ARCHIVE DESTINATION lib
-        LIBRARY DESTINATION lib
-        RUNTIME DESTINATION bin
-)
+    install(DIRECTORY include/ DESTINATION include)
 
-install(DIRECTORY include/ DESTINATION include)
+    install(EXPORT vectorXoshiroTargets
+            FILE vectorXoshiroTargets.cmake
+            NAMESPACE vectorXoshiro::
+            DESTINATION lib/cmake/vectorXoshiro
+    )
 
-install(EXPORT vectorXoshiroTargets
-        FILE vectorXoshiroTargets.cmake
-        NAMESPACE vectorXoshiro::
-        DESTINATION lib/cmake/vectorXoshiro
-)
+    include(CMakePackageConfigHelpers)
+    write_basic_package_version_file(
+            "${CMAKE_CURRENT_BINARY_DIR}/vectorXoshiroConfigVersion.cmake"
+            VERSION ${PROJECT_VERSION}
+            COMPATIBILITY AnyNewerVersion
+    )
 
-include(CMakePackageConfigHelpers)
-write_basic_package_version_file(
-        "${CMAKE_CURRENT_BINARY_DIR}/vectorXoshiroConfigVersion.cmake"
-        VERSION ${PROJECT_VERSION}
-        COMPATIBILITY AnyNewerVersion
-)
+    configure_file(vectorXoshiroConfig.cmake.in
+            "${CMAKE_CURRENT_BINARY_DIR}/vectorXoshiroConfig.cmake"
+            @ONLY
+    )
 
-configure_file(vectorXoshiroConfig.cmake.in
-        "${CMAKE_CURRENT_BINARY_DIR}/vectorXoshiroConfig.cmake"
-        @ONLY
-)
+    install(FILES
+            "${CMAKE_CURRENT_BINARY_DIR}/vectorXoshiroConfig.cmake"
+            "${CMAKE_CURRENT_BINARY_DIR}/vectorXoshiroConfigVersion.cmake"
+            DESTINATION lib/cmake/vectorXoshiro
+    )
 
-install(FILES
-        "${CMAKE_CURRENT_BINARY_DIR}/vectorXoshiroConfig.cmake"
-        "${CMAKE_CURRENT_BINARY_DIR}/vectorXoshiroConfigVersion.cmake"
-        DESTINATION lib/cmake/vectorXoshiro
-)
+endif ()
