@@ -22,7 +22,7 @@ if (NOT SKBUILD)
 endif()
 
 find_package(Python
-        REQUIRED COMPONENTS Interpreter Development.Module
+        REQUIRED COMPONENTS Interpreter Development.Module NumPy
         OPTIONAL_COMPONENTS Development.SABIModule)
 
 set(NANOBIND_VERSION 2.5.0)
@@ -33,7 +33,7 @@ CPMAddPackage(
     VERSION ${NANOBIND_VERSION}
 )
 
-nanobind_add_module(pyrandom NB_STATIC STABLE_ABI LTO splitmix.cpp)
-target_link_libraries(pyrandom PRIVATE vectorXoshiro)
+nanobind_add_module(pyrandom_ext NB_STATIC STABLE_ABI LTO pyrandom.cpp)
+target_link_libraries(pyrandom_ext PRIVATE vectorXoshiro Python::NumPy)
 
-install(TARGETS pyrandom LIBRARY DESTINATION .)
+install(TARGETS pyrandom_ext LIBRARY DESTINATION .)

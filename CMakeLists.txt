@@ -62,7 +62,7 @@ target_include_directories(vectorXoshiro PUBLIC
 
 target_link_libraries(vectorXoshiro PUBLIC xsimd)
 target_compile_options(vectorXoshiro PRIVATE ${COMPILE_OPTIONS})
-set_target_properties(vectorXoshiro PROPERTIES CMAKE_POSITION_INDEPENDENT_CODE ON)
+set_target_properties(vectorXoshiro PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 foreach (MARCH_VERSION IN ITEMS x86-64 x86-64-v2 x86-64-v3 x86-64-v4)
     string(REPLACE "-" "_" TARGET_SUFFIX "${MARCH_VERSION}")
@@ -71,6 +71,7 @@ foreach (MARCH_VERSION IN ITEMS x86-64 x86-64-v2 x86-64-v3 x86-64-v4)
     target_include_directories(${SIMD_SOURCE_TARGET} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
     target_link_libraries(${SIMD_SOURCE_TARGET} PRIVATE ${COMPILE_OPTIONS} xsimd)
     target_compile_options(${SIMD_SOURCE_TARGET} PRIVATE -march=${MARCH_VERSION})
+    set_target_properties(${SIMD_SOURCE_TARGET} PROPERTIES POSITION_INDEPENDENT_CODE ON)
     target_sources(vectorXoshiro PRIVATE $<TARGET_OBJECTS:${SIMD_SOURCE_TARGET}>)
 endforeach ()
 
