@@ -27,54 +27,54 @@ Vigna.
 #include <cstdint>
 #include <limits>
 
-#include "splitMix64.hpp"
+#include "splitmix.hpp"
 
 #if __cplusplus >= 202002L
 #include <bit>
 #endif
 
-namespace xoshiro {
+namespace prng {
 
 /**
- * @class Xoshiro
- * @brief A class implementing the Xoshiro random number generator.
+ * @class XoshiroScalar
+ * @brief A class implementing the XoshiroScalar random number generator.
  */
-class Xoshiro {
+class XoshiroScalar {
 public:
   using result_type = std::uint64_t;
   static constexpr auto(min)() noexcept { return std::numeric_limits<result_type>::min(); }
   static constexpr auto(max)() noexcept { return std::numeric_limits<result_type>::max(); }
 
   /**
-   * @brief Constructs the Xoshiro generator with a given seed.
+   * @brief Constructs the XoshiroScalar generator with a given seed.
    * @param seed The seed value.
    */
-  constexpr explicit Xoshiro(const result_type seed) noexcept : m_state{} {
-    SplitMix64 splitMix64{seed};
+  constexpr explicit XoshiroScalar(const result_type seed) noexcept : m_state{} {
+    SplitMix splitmix{seed};
     for (auto &element : m_state) {
-      element = splitMix64();
+      element = splitmix();
     }
   }
 
   /**
-   * @brief Constructs the Xoshiro generator with a given seed and thread ID.
+   * @brief Constructs the XoshiroScalar generator with a given seed and thread ID.
    * @param seed The seed value.
    * @param thread_id The thread ID.
    */
-  constexpr explicit Xoshiro(const result_type seed, const result_type thread_id) noexcept : Xoshiro(seed) {
+  constexpr explicit XoshiroScalar(const result_type seed, const result_type thread_id) noexcept : XoshiroScalar(seed) {
     for (result_type i = 0; i < thread_id; ++i) {
       jump();
     }
   }
 
   /**
-   * @brief Constructs the Xoshiro generator with a given seed and thread ID.
+   * @brief Constructs the XoshiroScalar generator with a given seed and thread ID.
    * @param seed The seed value.
    * @param thread_id The thread ID.
    * @param cluster_id The cluster ID.
    */
-  constexpr explicit Xoshiro(const result_type seed, const result_type thread_id, const result_type cluster_id) noexcept
-      : Xoshiro(seed, thread_id) {
+  constexpr explicit XoshiroScalar(const result_type seed, const result_type thread_id, const result_type cluster_id) noexcept
+      : XoshiroScalar(seed, thread_id) {
     for (result_type i = 0; i < cluster_id; ++i) {
       long_jump();
     }
@@ -196,4 +196,4 @@ private:
   }
 };
 
-} // namespace xoshiro
+} // namespace prng

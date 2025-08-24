@@ -3,7 +3,7 @@ import pyrandom
 
 
 def main() -> None:
-    rng = pyrandom.VectorXoshiro(123)
+    rng = pyrandom.XoshiroSIMD(123)
     a = rng.random((3, 4))
     print("uniform:\n", a)
 

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(XOSHIRO VERSION 0.1 LANGUAGES CXX)
+project(random VERSION 0.1 LANGUAGES CXX)
 
 set(CPM_DOWNLOAD_VERSION 0.40.6)
 set(XSIMD_DOWNLOAD_VERSION 13.2.0)
@@ -54,25 +54,25 @@ CPMAddPackage(
 #        >
 #)
 
-add_library(vectorXoshiro STATIC src/xoshiro.cpp)
-target_include_directories(vectorXoshiro PUBLIC
+add_library(random STATIC src/xoshiro_simd.cpp)
+target_include_directories(random PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:include>
 )
 
-target_link_libraries(vectorXoshiro PUBLIC xsimd)
-target_compile_options(vectorXoshiro PRIVATE ${COMPILE_OPTIONS})
-set_target_properties(vectorXoshiro PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_link_libraries(random PUBLIC xsimd)
+target_compile_options(random PRIVATE ${COMPILE_OPTIONS})
+set_target_properties(random PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 foreach (MARCH_VERSION IN ITEMS x86-64 x86-64-v2 x86-64-v3 x86-64-v4)
     string(REPLACE "-" "_" TARGET_SUFFIX "${MARCH_VERSION}")
-    set(SIMD_SOURCE_TARGET "vector_xoshiro_simd_source_${TARGET_SUFFIX}")
-    add_library(${SIMD_SOURCE_TARGET} OBJECT src/xoshiro_simd.cpp)
+    set(SIMD_SOURCE_TARGET "xoshiro_simd_source_${TARGET_SUFFIX}")
+    add_library(${SIMD_SOURCE_TARGET} OBJECT src/xoshiro_simd_dispatch.cpp)
     target_include_directories(${SIMD_SOURCE_TARGET} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
     target_link_libraries(${SIMD_SOURCE_TARGET} PRIVATE ${COMPILE_OPTIONS} xsimd)
     target_compile_options(${SIMD_SOURCE_TARGET} PRIVATE -march=${MARCH_VERSION})
     set_target_properties(${SIMD_SOURCE_TARGET} PROPERTIES POSITION_INDEPENDENT_CODE ON)
-    target_sources(vectorXoshiro PRIVATE $<TARGET_OBJECTS:${SIMD_SOURCE_TARGET}>)
+    target_sources(random PRIVATE $<TARGET_OBJECTS:${SIMD_SOURCE_TARGET}>)
 endforeach ()
 
 
@@ -105,14 +105,14 @@ if (NOT SUPPORTED_CXX_STANDARD)
     message(FATAL_ERROR "The compiler does not support C++17 or higher.")
 endif ()
 
-target_compile_features(vectorXoshiro PRIVATE cxx_std_${SUPPORTED_CXX_STANDARD})
+target_compile_features(random PRIVATE cxx_std_${SUPPORTED_CXX_STANDARD})
 
 if (ENABLE_PYTHON)
     add_subdirectory(python)
 else ()
     # Installation rules
-    install(TARGETS vectorXoshiro
-            EXPORT vectorXoshiroTargets
+    install(TARGETS random
+            EXPORT randomTargets
             ARCHIVE DESTINATION lib
             LIBRARY DESTINATION lib
             RUNTIME DESTINATION bin
@@ -120,28 +120,28 @@ else ()
 
     install(DIRECTORY include/ DESTINATION include)
 
-    install(EXPORT vectorXoshiroTargets
-            FILE vectorXoshiroTargets.cmake
-            NAMESPACE vectorXoshiro::
-            DESTINATION lib/cmake/vectorXoshiro
+    install(EXPORT randomTargets
+            FILE randomTargets.cmake
+            NAMESPACE prng::
+            DESTINATION lib/cmake/random
     )
 
     include(CMakePackageConfigHelpers)
     write_basic_package_version_file(
-            "${CMAKE_CURRENT_BINARY_DIR}/vectorXoshiroConfigVersion.cmake"
+            "${CMAKE_CURRENT_BINARY_DIR}/randomConfigVersion.cmake"
             VERSION ${PROJECT_VERSION}
             COMPATIBILITY AnyNewerVersion
     )
 
-    configure_file(vectorXoshiroConfig.cmake.in
-            "${CMAKE_CURRENT_BINARY_DIR}/vectorXoshiroConfig.cmake"
+    configure_file(cmake/randomConfig.cmake.in
+            "${CMAKE_CURRENT_BINARY_DIR}/randomConfig.cmake"
             @ONLY
     )
 
     install(FILES
-            "${CMAKE_CURRENT_BINARY_DIR}/vectorXoshiroConfig.cmake"
-            "${CMAKE_CURRENT_BINARY_DIR}/vectorXoshiroConfigVersion.cmake"
-            DESTINATION lib/cmake/vectorXoshiro
+            "${CMAKE_CURRENT_BINARY_DIR}/randomConfig.cmake"
+            "${CMAKE_CURRENT_BINARY_DIR}/randomConfigVersion.cmake"
+            DESTINATION lib/cmake/random
     )
 
 endif ()

@@ -3,7 +3,7 @@ import pyrandom
 
 
 def main() -> None:
-    rng = pyrandom.SplitMix64(123)
+    rng = pyrandom.SplitMix(123)
     a = rng.random((3, 4))
     print("uniform:", a)
 

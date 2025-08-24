@@ -1,9 +1,9 @@
 
-from pyrandom import VectorXoshiro
+from pyrandom import XoshiroSIMD
 
 
 def main():
-    rng = VectorXoshiro(42)
+    rng = XoshiroSIMD(42)
     print(rng.integers(0, 10, size=5))
 
 

@@ -4,7 +4,7 @@ import pyrandom
 
 
 def main() -> None:
-    rng = pyrandom.SplitMix64(123)
+    rng = pyrandom.SplitMix(123)
     normals = stats.norm.rvs(size=5, random_state=rng)
     print("scipy normals:", normals)
     integers = stats.randint.rvs(0, 10, size=5, random_state=rng)

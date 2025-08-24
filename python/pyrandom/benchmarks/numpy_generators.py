@@ -1,8 +1,8 @@
-"""Benchmark VectorXoshiro against common NumPy generators.
+"""Benchmark XoshiroSIMD against common NumPy generators.
 
 This script generates a large array of random numbers using several
 `numpy.random` generators and reports the fastest time observed.  It provides a
-rough comparison of throughput for VectorXoshiro versus NumPy's default
+rough comparison of throughput for XoshiroSIMD versus NumPy's default
 implementations.
 """
 
@@ -42,7 +42,7 @@ def _benchmark(name: str, factory: Callable[[], np.random.Generator], *, size: i
 
 def main() -> None:
     generators: Dict[str, Callable[[], np.random.Generator]] = {
-        "VectorXoshiro": lambda: pyrandom.VectorXoshiro(1234),
+        "XoshiroSIMD": lambda: pyrandom.XoshiroSIMD(1234),
         "PCG64": lambda: np.random.Generator(np.random.PCG64(1234)),
         "PCG64DXSM": lambda: np.random.Generator(np.random.PCG64DXSM(1234)),
         "Philox": lambda: np.random.Generator(np.random.Philox(1234)),

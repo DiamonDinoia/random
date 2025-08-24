@@ -1,19 +1,19 @@
-#include <xoshiro/vectorXoshiro.hpp>
+#include <random>
+#include <vector>
 
-#include <xoshiro256plusplus.c>
+#include <random/xoshiro_simd.hpp>
 #define CATCH_CONFIG_MAIN
 #define CATCH_CONFIG_ENABLE_BENCHMARKING
 #include <catch2/catch.hpp>
 
 static constexpr auto tests = 1 << 12; // 4096
-
-constexpr auto SIMD_WIDTH = xsimd::simd_type<xoshiro::VectorXoshiroNative::result_type>::size;
+constexpr auto SIMD_WIDTH = xsimd::simd_type<prng::XoshiroNative::result_type>::size;
 
 TEST_CASE("SEED", "[xoshiro256++]") {
   const auto seed = std::random_device()();
   INFO("SEED: " << seed);
-  xoshiro::Xoshiro reference(seed);
-  xoshiro::VectorXoshiroNative rng(seed);
+  prng::XoshiroScalar reference(seed);
+  prng::XoshiroNative rng(seed);
   REQUIRE(rng.getState(0) == reference.getState());
   for (auto i = 1UL; i < SIMD_WIDTH; ++i) {
       reference.jump();
@@ -24,8 +24,8 @@ TEST_CASE("SEED", "[xoshiro256++]") {
 TEST_CASE("JUMP", "[xoshiro256++]") {
   const auto seed = std::random_device()();
   INFO("SEED: " << seed);
-  xoshiro::Xoshiro reference(seed);
-  xoshiro::VectorXoshiroNative rng(seed);
+  prng::XoshiroScalar reference(seed);
+  prng::XoshiroNative rng(seed);
   REQUIRE(rng.getState(0) == reference.getState());
   for (auto i = 1UL; i < SIMD_WIDTH; ++i) {
     reference.jump();
@@ -42,8 +42,8 @@ TEST_CASE("JUMP", "[xoshiro256++]") {
 TEST_CASE("LONG JUMP", "[xoshiro256++]") {
   const auto seed = std::random_device()();
   INFO("SEED: " << seed);
-  xoshiro::Xoshiro reference(seed);
-  xoshiro::VectorXoshiroNative rng(seed);
+  prng::XoshiroScalar reference(seed);
+  prng::XoshiroNative rng(seed);
   rng.long_jump();
   reference.long_jump();
   for (auto i = 0UL; i < SIMD_WIDTH; ++i) {
@@ -56,8 +56,8 @@ TEST_CASE("LONG JUMP", "[xoshiro256++]") {
 TEST_CASE("GENERATE UINT64", "[xoshiro256++]") {
   const auto seed = std::random_device()();
   INFO("SEED: " << seed);
-  xoshiro::VectorXoshiroNative rng(seed);
-  std::vector<xoshiro::Xoshiro> reference;
+  prng::XoshiroNative rng(seed);
+  std::vector<prng::XoshiroScalar> reference;
   reference.reserve(SIMD_WIDTH);
   for (auto i = 0UL; i < SIMD_WIDTH; ++i) {
     reference.emplace_back(seed);
@@ -81,8 +81,8 @@ TEST_CASE("GENERATE UINT64", "[xoshiro256++]") {
 TEST_CASE("GENERATE DOUBLE", "[xoshiro256++]") {
   const auto seed = std::random_device()();
   INFO("SEED: " << seed);
-  xoshiro::VectorXoshiroNative rng(seed);
-  std::vector<xoshiro::Xoshiro> reference;
+  prng::XoshiroNative rng(seed);
+  std::vector<prng::XoshiroScalar> reference;
   reference.reserve(SIMD_WIDTH);
   for (auto i = 0UL; i < SIMD_WIDTH; ++i) {
     reference.emplace_back(seed);

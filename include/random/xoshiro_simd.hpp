@@ -22,7 +22,6 @@ Vigna.
 
 #pragma once
 
-#include "vectorXoshiro.hpp"
 
 #include <array>
 #include <cstdint>
@@ -30,23 +29,23 @@ Vigna.
 
 #include <xsimd/xsimd.hpp>
 
-#include "xoshiro.hpp"
+#include "xoshiro_scalar.hpp"
 
-namespace xoshiro {
+namespace prng {
 
 /**
- * Forward declaration of the VectorXoshiro class.
+ * Forward declaration of the XoshiroSIMD class.
  */
-class VectorXoshiro;
+class XoshiroSIMD;
 
 namespace internal {
 
 /**
- * Implementation of the VectorXoshiro class template.
+ * Implementation of the XoshiroSIMD class template.
  *
  * @tparam Arch The architecture type for SIMD operations.
  */
-template <class Arch> class VectorXoshiroImpl {
+template <class Arch> class XoshiroSIMDImpl {
 public:
   using result_type = std::uint64_t;
   static constexpr auto(min)() noexcept { return (std::numeric_limits<result_type>::min)(); }
@@ -66,9 +65,9 @@ public:
    * @param seed The seed value.
    * @param cache Reference to the external cache.
    */
-  constexpr explicit VectorXoshiroImpl(const result_type seed, std::array<result_type, CACHE_SIZE> &cache) noexcept
+  constexpr explicit XoshiroSIMDImpl(const result_type seed, std::array<result_type, CACHE_SIZE> &cache) noexcept
       : m_cache(cache), m_state{}, m_index{0} {
-    Xoshiro rng{seed};
+    XoshiroScalar rng{seed};
     std::array<std::array<result_type, SIMD_WIDTH>, RNG_WIDTH> states{};
     for (auto i = 0UL; i < SIMD_WIDTH; ++i) {
       for (auto j = 0UL; j < RNG_WIDTH; ++j) {
@@ -88,9 +87,9 @@ public:
    * @param thread_id The thread ID.
    * @param cache Reference to the external cache.
    */
-  constexpr explicit VectorXoshiroImpl(const result_type seed, const result_type thread_id,
+  constexpr explicit XoshiroSIMDImpl(const result_type seed, const result_type thread_id,
                                        std::array<result_type, CACHE_SIZE> &cache) noexcept
-      : VectorXoshiroImpl(seed, cache) {
+      : XoshiroSIMDImpl(seed, cache) {
     for (result_type i = 0; i < thread_id; ++i) {
       jump();
     }
@@ -104,10 +103,10 @@ public:
    * @param cluster_id The cluster ID.
    * @param cache Reference to the external cache.
    */
-  constexpr explicit VectorXoshiroImpl(const result_type seed, const result_type thread_id,
+  constexpr explicit XoshiroSIMDImpl(const result_type seed, const result_type thread_id,
                                        const result_type cluster_id,
                                        std::array<result_type, CACHE_SIZE> &cache) noexcept
-      : VectorXoshiroImpl(seed, thread_id, cache) {
+      : XoshiroSIMDImpl(seed, thread_id, cache) {
     for (result_type i = 0; i < cluster_id; ++i) {
       long_jump();
     }
@@ -242,46 +241,46 @@ private:
    */
   constexpr void populate_cache() noexcept { unroll_populate(std::make_index_sequence<CACHE_SIZE / SIMD_WIDTH>{}); }
 
-  friend VectorXoshiro;
+  friend XoshiroSIMD;
 };
 
-struct VectorXoshiroCreator;
+struct XoshiroSIMDCreator;
 
 } // namespace internal
 
 /**
- * VectorXoshiro class using the best available architecture.
+ * XoshiroSIMD class using the best available architecture.
  */
-class VectorXoshiroNative : public internal::VectorXoshiroImpl<xsimd::best_arch> {
+class XoshiroNative : public internal::XoshiroSIMDImpl<xsimd::best_arch> {
 public:
-  using VectorXoshiroImpl::VectorXoshiroImpl;
+  using XoshiroSIMDImpl::XoshiroSIMDImpl;
 
   /**
    * Constructor that initializes the generator with a seed.
    *
    * @param seed The seed value.
    */
-  explicit VectorXoshiroNative(const result_type seed) noexcept : VectorXoshiroImpl(seed, m_cache) {}
-  explicit VectorXoshiroNative(const result_type seed, const result_type thread_id) noexcept
-      : VectorXoshiroImpl(seed, thread_id, m_cache) {}
-  explicit VectorXoshiroNative(const result_type seed, const result_type thread_id,
-                               const result_type cluster_id) noexcept
-      : VectorXoshiroImpl(seed, thread_id, cluster_id, m_cache) {}
+  explicit XoshiroNative(const result_type seed) noexcept : XoshiroSIMDImpl(seed, m_cache) {}
+  explicit XoshiroNative(const result_type seed, const result_type thread_id) noexcept
+      : XoshiroSIMDImpl(seed, thread_id, m_cache) {}
+  explicit XoshiroNative(const result_type seed, const result_type thread_id,
+                         const result_type cluster_id) noexcept
+      : XoshiroSIMDImpl(seed, thread_id, cluster_id, m_cache) {}
 
 private:
   alignas(simd_type::arch_type::alignment()) std::array<result_type, CACHE_SIZE> m_cache{};
 };
 
 /**
- * VectorXoshiro class that provides a high-level interface for the generator.
+ * XoshiroSIMD class that provides a high-level interface for the generator.
  */
-class VectorXoshiro {
+class XoshiroSIMD {
 public:
-  using result_type = internal::VectorXoshiroImpl<xsimd::best_arch>::result_type;
-  constexpr static result_type(min)() noexcept { return internal::VectorXoshiroImpl<xsimd::best_arch>::min(); }
-  constexpr static result_type(max)() noexcept { return internal::VectorXoshiroImpl<xsimd::best_arch>::max(); }
+  using result_type = internal::XoshiroSIMDImpl<xsimd::best_arch>::result_type;
+  constexpr static result_type(min)() noexcept { return internal::XoshiroSIMDImpl<xsimd::best_arch>::min(); }
+  constexpr static result_type(max)() noexcept { return internal::XoshiroSIMDImpl<xsimd::best_arch>::max(); }
 
-  explicit VectorXoshiro(result_type seed, result_type thread_id=0, result_type cluster_id=0);
+  explicit XoshiroSIMD(result_type seed, result_type thread_id=0, result_type cluster_id=0);
 
   /**
    * Generates the next random number.
@@ -313,25 +312,25 @@ public:
   void long_jump() noexcept { pImpl->long_jump(); }
 
 private:
-  static constexpr auto CACHE_SIZE = internal::VectorXoshiroImpl<xsimd::default_arch>::CACHE_SIZE;
+  static constexpr auto CACHE_SIZE = internal::XoshiroSIMDImpl<xsimd::default_arch>::CACHE_SIZE;
 
   /**
    * Abstract interface to hide the templated implementation.
    */
-  struct IVectorXoshiro {
-    virtual ~IVectorXoshiro() = default;
+  struct IXoshiroSIMD {
+    virtual ~IXoshiroSIMD() = default;
     virtual void populate_cache() noexcept = 0;
     virtual void jump() noexcept = 0;
     virtual void long_jump() noexcept = 0;
   };
 
   /**
-   * Templated wrapper that delegates to internal::VectorXoshiroImpl<Arch>.
+   * Templated wrapper that delegates to internal::XoshiroSIMDImpl<Arch>.
    *
    * @tparam Arch The architecture type for SIMD operations.
    */
-  template <class Arch> class ImplWrapper : public IVectorXoshiro {
-    internal::VectorXoshiroImpl<Arch> impl;
+  template <class Arch> class ImplWrapper : public IXoshiroSIMD {
+    internal::XoshiroSIMDImpl<Arch> impl;
 
   public:
     explicit ImplWrapper(result_type seed, result_type thread_id, result_type cluster_id,
@@ -343,61 +342,61 @@ private:
   };
 
   alignas(xsimd::avx512f::alignment()) std::array<result_type, CACHE_SIZE> m_cache;
-  std::unique_ptr<IVectorXoshiro> pImpl;
+  std::unique_ptr<IXoshiroSIMD> pImpl;
   std::uint8_t m_index;
 
-  friend std::unique_ptr<IVectorXoshiro> create_vector_xoshiro_impl(result_type seed, result_type thread_id,
+  friend std::unique_ptr<IXoshiroSIMD> create_xoshiro_simd_impl(result_type seed, result_type thread_id,
                                                                     result_type cluster_id,
                                                                     std::array<result_type, CACHE_SIZE> &cache);
-  friend internal::VectorXoshiroCreator;
+  friend internal::XoshiroSIMDCreator;
 };
 
 /**
- * Extern function declaration to create a VectorXoshiro implementation.
+ * Extern function declaration to create a XoshiroSIMD implementation.
  *
  * @param seed The seed value.
  * @param thread_id The thread ID.
  * @param cluster_id The cluster ID.
  * @param cache Reference to the external cache.
- * @return A unique pointer to the VectorXoshiro implementation.
+ * @return A unique pointer to the XoshiroSIMD implementation.
  */
-std::unique_ptr<VectorXoshiro::IVectorXoshiro>
-create_vector_xoshiro_impl(VectorXoshiro::result_type seed, VectorXoshiro::result_type thread_id,
-                           VectorXoshiro::result_type cluster_id,
-                           std::array<VectorXoshiro::result_type, VectorXoshiro::CACHE_SIZE> &cache);
+std::unique_ptr<XoshiroSIMD::IXoshiroSIMD>
+create_xoshiro_simd_impl(XoshiroSIMD::result_type seed, XoshiroSIMD::result_type thread_id,
+                           XoshiroSIMD::result_type cluster_id,
+                           std::array<XoshiroSIMD::result_type, XoshiroSIMD::CACHE_SIZE> &cache);
 
 namespace internal {
 
 /**
- * Functor used by xsimd::dispatch to create a VectorXoshiro implementation.
+ * Functor used by xsimd::dispatch to create a XoshiroSIMD implementation.
  */
-struct VectorXoshiroCreator {
-  VectorXoshiro::result_type seed, thread_id, cluster_id;
-  std::array<VectorXoshiro::result_type, VectorXoshiro::CACHE_SIZE> &cache;
+struct XoshiroSIMDCreator {
+  XoshiroSIMD::result_type seed, thread_id, cluster_id;
+  std::array<XoshiroSIMD::result_type, XoshiroSIMD::CACHE_SIZE> &cache;
 
   /**
-   * Operator that creates a VectorXoshiro implementation for the given architecture.
+   * Operator that creates a XoshiroSIMD implementation for the given architecture.
    *
    * @tparam Arch The architecture type for SIMD operations.
    * @param arch The architecture tag.
-   * @return A unique pointer to the VectorXoshiro implementation.
+   * @return A unique pointer to the XoshiroSIMD implementation.
    */
-  template <class Arch> std::unique_ptr<VectorXoshiro::IVectorXoshiro> operator()(Arch) const;
+  template <class Arch> std::unique_ptr<XoshiroSIMD::IXoshiroSIMD> operator()(Arch) const;
 };
 
-template <class Arch> std::unique_ptr<VectorXoshiro::IVectorXoshiro> VectorXoshiroCreator::operator()(Arch) const {
-  return std::make_unique<VectorXoshiro::ImplWrapper<Arch>>(seed, thread_id, cluster_id, cache);
+template <class Arch> std::unique_ptr<XoshiroSIMD::IXoshiroSIMD> XoshiroSIMDCreator::operator()(Arch) const {
+  return std::make_unique<XoshiroSIMD::ImplWrapper<Arch>>(seed, thread_id, cluster_id, cache);
 }
 
-extern template std::unique_ptr<VectorXoshiro::IVectorXoshiro>
-VectorXoshiroCreator::operator()<xsimd::sse2>(xsimd::sse2) const;
-extern template std::unique_ptr<VectorXoshiro::IVectorXoshiro>
-VectorXoshiroCreator::operator()<xsimd::sse4_2>(xsimd::sse4_2) const;
-extern template std::unique_ptr<VectorXoshiro::IVectorXoshiro>
-VectorXoshiroCreator::operator()<xsimd::fma3<xsimd::avx2>>(xsimd::fma3<xsimd::avx2>) const;
-extern template std::unique_ptr<VectorXoshiro::IVectorXoshiro>
-VectorXoshiroCreator::operator()<xsimd::avx512f>(xsimd::avx512f) const;
+extern template std::unique_ptr<XoshiroSIMD::IXoshiroSIMD>
+XoshiroSIMDCreator::operator()<xsimd::sse2>(xsimd::sse2) const;
+extern template std::unique_ptr<XoshiroSIMD::IXoshiroSIMD>
+XoshiroSIMDCreator::operator()<xsimd::sse4_2>(xsimd::sse4_2) const;
+extern template std::unique_ptr<XoshiroSIMD::IXoshiroSIMD>
+XoshiroSIMDCreator::operator()<xsimd::fma3<xsimd::avx2>>(xsimd::fma3<xsimd::avx2>) const;
+extern template std::unique_ptr<XoshiroSIMD::IXoshiroSIMD>
+XoshiroSIMDCreator::operator()<xsimd::avx512f>(xsimd::avx512f) const;
 
 } // namespace internal
 
-} // namespace xoshiro
+} // namespace prng

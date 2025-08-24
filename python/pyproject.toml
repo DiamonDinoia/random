@@ -5,10 +5,10 @@ build-backend = "scikit_build_core.build"
 [project]
 name = "pyrandom"
 version = "0.1.0"
-description = "Python bindings for random generation using vectorXoshiro"
+description = "Python bindings for the random library"
 authors = [{ name = "Your Name", email = "you@example.com" }]
 license = "MIT"
-readme = "readme.md"
+readme = "../readme.md"
 requires-python = ">=3.8"
 dependencies = ["numpy"]
 
@@ -20,3 +20,4 @@ cmake.targets = ["pyrandom_ext"]
 cmake.define = {"ENABLE_PYTHON" = "ON"}
 wheel.py-api = "cp312"
 wheel.packages = ["pyrandom"]
+wheel.exclude = ["pyrandom/tests", "pyrandom/examples", "pyrandom/benchmarks"]

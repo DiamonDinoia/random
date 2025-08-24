@@ -31,14 +31,14 @@ def _run_distribution_checks(rng):
     assert s_int.max() < 10 and s_int.min() >= 0
 
 
-def test_splitmix64_distributions():
-    _run_distribution_checks(pyrandom.SplitMix64(123))
+def test_splitmix_distributions():
+    _run_distribution_checks(pyrandom.SplitMix(123))
 
 
 def test_xoshiro_distributions():
     _run_distribution_checks(pyrandom.Xoshiro(123))
 
 
-def test_vectorxoshiro_distributions():
-    _run_distribution_checks(pyrandom.VectorXoshiro(123))
+def test_simd_distributions():
+    _run_distribution_checks(pyrandom.XoshiroSIMD(123))
 

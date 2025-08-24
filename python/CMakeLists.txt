@@ -34,6 +34,6 @@ CPMAddPackage(
 )
 
 nanobind_add_module(pyrandom_ext NB_STATIC STABLE_ABI LTO pyrandom.cpp)
-target_link_libraries(pyrandom_ext PRIVATE vectorXoshiro Python::NumPy)
+target_link_libraries(pyrandom_ext PRIVATE random Python::NumPy)
 
 install(TARGETS pyrandom_ext LIBRARY DESTINATION .)

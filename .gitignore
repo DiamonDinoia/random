@@ -1,3 +1,6 @@
 cmake-build-*/
 .idea
 build/
+pyrandom/__pycache__/
+fix.patch
+

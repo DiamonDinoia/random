@@ -23,11 +23,11 @@ Ported to C++ by Marco Barbone. Original implementation by Guy Steele.
 #include <cstdint>
 #include <limits>
 
-namespace xoshiro {
+namespace prng {
 
-class SplitMix64 {
+class SplitMix {
 public:
-  constexpr explicit SplitMix64(const std::uint64_t state) noexcept : m_state(state) {}
+  constexpr explicit SplitMix(const std::uint64_t state) noexcept : m_state(state) {}
 
   constexpr std::uint64_t operator()() {
     std::uint64_t z = (m_state += 0x9e3779b97f4a7c15);
@@ -48,4 +48,6 @@ private:
   std::uint64_t m_state;
 };
 
-} // namespace xoshiro
+} // namespace prng
+
+
