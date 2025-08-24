@@ -15,6 +15,7 @@ dependencies = ["numpy"]
 [tool.scikit-build]
 cmake.minimum-version = "3.15"
 cmake.build-type = "Release"
+cmake.source-dir = ".."
 build-dir = "build/{wheel_tag}"
 cmake.targets = ["pyrandom_ext"]
 cmake.define = {"ENABLE_PYTHON" = "ON"}
