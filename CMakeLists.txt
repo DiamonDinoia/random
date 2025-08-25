@@ -34,35 +34,65 @@ CPMAddPackage(
         GIT_PROGRESS YES
         EXCLUDE_FROM_ALL YES
 )
-#
-#set(COMPILE_OPTIONS
-#        $<$<CONFIG:Debug>:
-#        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-fstack-protector-all -Wall -Wextra -pedantic -fno-omit-frame-pointer -g -O0>
-#        $<$<CXX_COMPILER_ID:MSVC>:/W4 /Od /Zi>
-#        >
-#        $<$<CONFIG:Release>:
-#        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-O3>
-#        $<$<CXX_COMPILER_ID:MSVC>:/O2>
-#        >
-#        $<$<CONFIG:RelWithDebInfo>:
-#        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-O2 -g>
-#        $<$<CXX_COMPILER_ID:MSVC>:/O2 /Zi>
-#        >
-#        $<$<CONFIG:MinSizeRel>:
-#        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Os>
-#        $<$<CXX_COMPILER_ID:MSVC>:/O1>
-#        >
-#)
+
+# cmake
+set(COMPILE_OPTIONS
+        # Common warnings and sane defaults
+        $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Wpedantic -Wformat=2 -Wformat-security -fvisibility=hidden>
+        $<$<CXX_COMPILER_ID:AppleClang>:-Wall -Wextra -Wpedantic -Wformat=2 -Wformat-security -fvisibility=hidden>
+        $<$<CXX_COMPILER_ID:MSVC>:/W4 /permissive- /EHsc /Zc:__cplusplus /Zc:throwingNew /utf-8 /MP>
+
+        # Debug: full debug info, frame pointers for profiling, strong stack protector,
+        # and extra libstdc++ assertions on GNU/Clang.
+        $<$<CONFIG:Debug>:
+        $<$<CXX_COMPILER_ID:GNU,Clang>:-O0 -g3 -fno-omit-frame-pointer -fstack-protector-strong -D_GLIBCXX_ASSERTIONS>
+        $<$<CXX_COMPILER_ID:AppleClang>:-O0 -g3 -fno-omit-frame-pointer -fstack-protector-strong>
+        $<$<CXX_COMPILER_ID:MSVC>:/Od /Zi /RTC1>
+        >
+
+        # RelWithDebInfo: optimized with debug info, keep frame pointers, harden, and disable asserts.
+        $<$<CONFIG:RelWithDebInfo>:
+        $<$<CXX_COMPILER_ID:GNU,Clang>:-O2 -g -fno-omit-frame-pointer -fstack-protector-strong -DNDEBUG -D_FORTIFY_SOURCE=2>
+        $<$<CXX_COMPILER_ID:AppleClang>:-O2 -g -fno-omit-frame-pointer -fstack-protector-strong -DNDEBUG>
+        $<$<CXX_COMPILER_ID:MSVC>:/O2 /Zi /Gy /DNDEBUG>
+        >
+
+        # Release: maximum performance and harden.
+        $<$<CONFIG:Release>:
+        $<$<CXX_COMPILER_ID:GNU,Clang>:-O3 -DNDEBUG -D_FORTIFY_SOURCE=2>
+        $<$<CXX_COMPILER_ID:AppleClang>:-O3 -DNDEBUG>
+        $<$<CXX_COMPILER_ID:MSVC>:/O2 /Gy /DNDEBUG>
+        >
+
+        # MinSizeRel: prioritize size, still harden.
+        $<$<CONFIG:MinSizeRel>:
+        $<$<CXX_COMPILER_ID:GNU,Clang>:-Os -DNDEBUG -D_FORTIFY_SOURCE=2>
+        $<$<CXX_COMPILER_ID:AppleClang>:-Oz -DNDEBUG>
+        $<$<CXX_COMPILER_ID:MSVC>:/O1 /Gy /DNDEBUG>
+        >
+)
+# 1) Detect support
+include(CheckCXXCompilerFlag)
+check_cxx_compiler_flag("-flto=full" COMPILER_SUPPORTS_LTO_FULL)
+check_cxx_compiler_flag("-fimplicit-constexpr" COMPILER_SUPPORTS_FIMPLICIT_CONSTEXPR)
+
+# 2) Append conditionally to your existing COMPILE_OPTIONS
+list(APPEND COMPILE_OPTIONS
+    $<$<BOOL:${COMPILER_SUPPORTS_FIMPLICIT_CONSTEXPR}>:-fimplicit-constexpr>
+    $<$<AND:$<BOOL:${COMPILER_SUPPORTS_LTO_FULL}>,$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>,$<CONFIG:MinSizeRel>>>:-flto=full>
+)
 
 add_library(random STATIC src/xoshiro_simd.cpp)
 target_include_directories(random PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:include>
 )
-
 target_link_libraries(random PUBLIC xsimd)
-target_compile_options(random PRIVATE ${COMPILE_OPTIONS})
 set_target_properties(random PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_compile_options(random PRIVATE ${COMPILE_OPTIONS})
+target_link_options(random PRIVATE
+        $<$<AND:$<BOOL:${COMPILER_SUPPORTS_LTO_FULL}>,$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>,$<CONFIG:MinSizeRel>>>:-flto=full>
+)
 
 foreach (MARCH_VERSION IN ITEMS x86-64 x86-64-v2 x86-64-v3 x86-64-v4)
     string(REPLACE "-" "_" TARGET_SUFFIX "${MARCH_VERSION}")

@@ -22,13 +22,13 @@ Vigna.
 
 #pragma once
 
-
 #include <array>
 #include <cstdint>
 #include <limits>
 
 #include <xsimd/xsimd.hpp>
 
+#include "inline.hpp"
 #include "xoshiro_scalar.hpp"
 
 namespace prng {
@@ -48,9 +48,9 @@ namespace internal {
 template <class Arch> class XoshiroSIMDImpl {
 public:
   using result_type = std::uint64_t;
-  static constexpr auto(min)() noexcept { return (std::numeric_limits<result_type>::min)(); }
-  static constexpr auto(max)() noexcept { return (std::numeric_limits<result_type>::max)(); }
-  static constexpr auto stateSize() noexcept { return RNG_WIDTH; }
+  static constexpr PRNG_ALWAYS_INLINE auto(min)() noexcept { return (std::numeric_limits<result_type>::min)(); }
+  static constexpr PRNG_ALWAYS_INLINE auto(max)() noexcept { return (std::numeric_limits<result_type>::max)(); }
+  static constexpr PRNG_ALWAYS_INLINE auto stateSize() noexcept { return RNG_WIDTH; }
 
 protected:
   using simd_type = xsimd::batch<result_type, Arch>;
@@ -65,7 +65,8 @@ public:
    * @param seed The seed value.
    * @param cache Reference to the external cache.
    */
-  constexpr explicit XoshiroSIMDImpl(const result_type seed, std::array<result_type, CACHE_SIZE> &cache) noexcept
+  PRNG_ALWAYS_INLINE constexpr explicit XoshiroSIMDImpl(const result_type seed,
+                                                        std::array<result_type, CACHE_SIZE> &cache) noexcept
       : m_cache(cache), m_state{}, m_index{0} {
     XoshiroScalar rng{seed};
     std::array<std::array<result_type, SIMD_WIDTH>, RNG_WIDTH> states{};
@@ -87,8 +88,8 @@ public:
    * @param thread_id The thread ID.
    * @param cache Reference to the external cache.
    */
-  constexpr explicit XoshiroSIMDImpl(const result_type seed, const result_type thread_id,
-                                       std::array<result_type, CACHE_SIZE> &cache) noexcept
+  PRNG_ALWAYS_INLINE constexpr explicit XoshiroSIMDImpl(const result_type seed, const result_type thread_id,
+                                                        std::array<result_type, CACHE_SIZE> &cache) noexcept
       : XoshiroSIMDImpl(seed, cache) {
     for (result_type i = 0; i < thread_id; ++i) {
       jump();
@@ -103,9 +104,9 @@ public:
    * @param cluster_id The cluster ID.
    * @param cache Reference to the external cache.
    */
-  constexpr explicit XoshiroSIMDImpl(const result_type seed, const result_type thread_id,
-                                       const result_type cluster_id,
-                                       std::array<result_type, CACHE_SIZE> &cache) noexcept
+  PRNG_ALWAYS_INLINE constexpr explicit XoshiroSIMDImpl(const result_type seed, const result_type thread_id,
+                                                        const result_type cluster_id,
+                                                        std::array<result_type, CACHE_SIZE> &cache) noexcept
       : XoshiroSIMDImpl(seed, thread_id, cache) {
     for (result_type i = 0; i < cluster_id; ++i) {
       long_jump();
@@ -117,7 +118,7 @@ public:
    *
    * @return The next random number.
    */
-  constexpr auto operator()() noexcept {
+  PRNG_ALWAYS_INLINE constexpr auto operator()() noexcept {
     if (m_index == 0) {
       populate_cache();
     }
@@ -129,7 +130,7 @@ public:
    *
    * @return A uniform random number.
    */
-  constexpr auto uniform() noexcept { return static_cast<double>(operator()() >> 11) * 0x1.0p-53; }
+  PRNG_ALWAYS_INLINE constexpr auto uniform() noexcept { return static_cast<double>(operator()() >> 11) * 0x1.0p-53; }
 
   /**
    * Returns the state of the generator at the specified index.
@@ -137,7 +138,7 @@ public:
    * @param index The index of the state.
    * @return The state at the specified index.
    */
-  constexpr auto getState(const std::size_t index) const {
+  PRNG_ALWAYS_INLINE constexpr auto getState(const std::size_t index) const noexcept {
     std::array<result_type, RNG_WIDTH> state{};
     for (auto i = UINT8_C(0); i < RNG_WIDTH; ++i) {
       state[i] = m_state[i].get(index);
@@ -149,7 +150,7 @@ public:
    * Jump function for the generator. It is equivalent to 2^128 calls to next().
    * It can be used to generate 2^128 non-overlapping subsequences for parallel computations.
    */
-  constexpr void jump() noexcept {
+  PRNG_ALWAYS_INLINE constexpr void jump() noexcept {
     constexpr result_type JUMP[] = {0x180ec6d33cfd0aba, 0xd5a61266f0c9392c, 0xa9582618e03fc9aa, 0x39abdc4529b1661c};
     for (auto _ = UINT8_C(0); _ < SIMD_WIDTH; ++_) {
       simd_type s0(0);
@@ -178,7 +179,7 @@ public:
    * It can be used to generate 2^64 starting points, from each of which jump() will generate 2^64 non-overlapping
    * subsequences for parallel distributed computations.
    */
-  constexpr void long_jump() noexcept {
+  PRNG_ALWAYS_INLINE constexpr void long_jump() noexcept {
     constexpr result_type LONG_JUMP[] = {0x76e15d3efefdcbbf, 0xc5004e441c522fb3, 0x77710069854ee241,
                                          0x39109bb02acbe635};
     simd_type s0(0);
@@ -211,7 +212,7 @@ private:
    *
    * @return The next state.
    */
-  constexpr auto next() noexcept {
+  PRNG_ALWAYS_INLINE constexpr auto next() noexcept {
     const auto result = rotl(m_state[0] + m_state[3], 23) + m_state[0];
     const auto t = m_state[1] << 17;
 
@@ -232,14 +233,16 @@ private:
    *
    * @tparam Is The indices of the cache.
    */
-   template <size_t... Is> constexpr void unroll_populate(std::index_sequence<Is...>) noexcept {
+  template <size_t... Is> constexpr void unroll_populate(std::index_sequence<Is...>) noexcept {
     (next().store_aligned(m_cache.data() + Is * SIMD_WIDTH), ...);
   }
 
   /**
    * Populates the cache with random numbers.
    */
-  constexpr void populate_cache() noexcept { unroll_populate(std::make_index_sequence<CACHE_SIZE / SIMD_WIDTH>{}); }
+  PRNG_ALWAYS_INLINE constexpr void populate_cache() noexcept {
+    unroll_populate(std::make_index_sequence<CACHE_SIZE / SIMD_WIDTH>{});
+  }
 
   friend XoshiroSIMD;
 };
@@ -260,11 +263,11 @@ public:
    *
    * @param seed The seed value.
    */
-  explicit XoshiroNative(const result_type seed) noexcept : XoshiroSIMDImpl(seed, m_cache) {}
-  explicit XoshiroNative(const result_type seed, const result_type thread_id) noexcept
+  PRNG_ALWAYS_INLINE explicit XoshiroNative(const result_type seed) noexcept : XoshiroSIMDImpl(seed, m_cache) {}
+  PRNG_ALWAYS_INLINE explicit XoshiroNative(const result_type seed, const result_type thread_id) noexcept
       : XoshiroSIMDImpl(seed, thread_id, m_cache) {}
-  explicit XoshiroNative(const result_type seed, const result_type thread_id,
-                         const result_type cluster_id) noexcept
+  PRNG_ALWAYS_INLINE explicit XoshiroNative(const result_type seed, const result_type thread_id,
+                                            const result_type cluster_id) noexcept
       : XoshiroSIMDImpl(seed, thread_id, cluster_id, m_cache) {}
 
 private:
@@ -277,17 +280,21 @@ private:
 class XoshiroSIMD {
 public:
   using result_type = internal::XoshiroSIMDImpl<xsimd::best_arch>::result_type;
-  constexpr static result_type(min)() noexcept { return internal::XoshiroSIMDImpl<xsimd::best_arch>::min(); }
-  constexpr static result_type(max)() noexcept { return internal::XoshiroSIMDImpl<xsimd::best_arch>::max(); }
+  constexpr static PRNG_ALWAYS_INLINE result_type(min)() noexcept {
+    return internal::XoshiroSIMDImpl<xsimd::best_arch>::min();
+  }
+  constexpr static PRNG_ALWAYS_INLINE result_type(max)() noexcept {
+    return internal::XoshiroSIMDImpl<xsimd::best_arch>::max();
+  }
 
-  explicit XoshiroSIMD(result_type seed, result_type thread_id=0, result_type cluster_id=0);
+  explicit XoshiroSIMD(result_type seed, result_type thread_id = 0, result_type cluster_id = 0) noexcept;
 
   /**
    * Generates the next random number.
    *
    * @return The next random number.
    */
-  result_type operator()() noexcept {
+  PRNG_ALWAYS_INLINE result_type operator()() noexcept {
     if (m_index == 0) [[unlikely]] {
       pImpl->populate_cache();
     }
@@ -299,17 +306,17 @@ public:
    *
    * @return A uniform random number.
    */
-  double uniform() noexcept { return static_cast<double>(operator()() >> 11) * 0x1.0p-53; }
+  PRNG_ALWAYS_INLINE double uniform() noexcept { return static_cast<double>(operator()() >> 11) * 0x1.0p-53; }
 
   /**
    * Jump function for the generator.
    */
-  void jump() noexcept { pImpl->jump(); }
+  PRNG_ALWAYS_INLINE void jump() noexcept { pImpl->jump(); }
 
   /**
    * Long-jump function for the generator.
    */
-  void long_jump() noexcept { pImpl->long_jump(); }
+  PRNG_ALWAYS_INLINE void long_jump() noexcept { pImpl->long_jump(); }
 
 private:
   static constexpr auto CACHE_SIZE = internal::XoshiroSIMDImpl<xsimd::default_arch>::CACHE_SIZE;
@@ -333,12 +340,12 @@ private:
     internal::XoshiroSIMDImpl<Arch> impl;
 
   public:
-    explicit ImplWrapper(result_type seed, result_type thread_id, result_type cluster_id,
-                         std::array<result_type, CACHE_SIZE> &cache)
+    PRNG_ALWAYS_INLINE explicit ImplWrapper(result_type seed, result_type thread_id, result_type cluster_id,
+                                            std::array<result_type, CACHE_SIZE> &cache) noexcept
         : impl(seed, thread_id, cluster_id, cache) {}
-    void populate_cache() noexcept final { impl.populate_cache(); }
-    void jump() noexcept final { impl.jump(); }
-    void long_jump() noexcept final { impl.long_jump(); }
+    PRNG_ALWAYS_INLINE void populate_cache() noexcept final { impl.populate_cache(); }
+    PRNG_ALWAYS_INLINE void jump() noexcept final { impl.jump(); }
+    PRNG_ALWAYS_INLINE void long_jump() noexcept final { impl.long_jump(); }
   };
 
   alignas(xsimd::avx512f::alignment()) std::array<result_type, CACHE_SIZE> m_cache;
@@ -346,8 +353,8 @@ private:
   std::uint8_t m_index;
 
   friend std::unique_ptr<IXoshiroSIMD> create_xoshiro_simd_impl(result_type seed, result_type thread_id,
-                                                                    result_type cluster_id,
-                                                                    std::array<result_type, CACHE_SIZE> &cache);
+                                                                result_type cluster_id,
+                                                                std::array<result_type, CACHE_SIZE> &cache);
   friend internal::XoshiroSIMDCreator;
 };
 
@@ -362,8 +369,8 @@ private:
  */
 std::unique_ptr<XoshiroSIMD::IXoshiroSIMD>
 create_xoshiro_simd_impl(XoshiroSIMD::result_type seed, XoshiroSIMD::result_type thread_id,
-                           XoshiroSIMD::result_type cluster_id,
-                           std::array<XoshiroSIMD::result_type, XoshiroSIMD::CACHE_SIZE> &cache);
+                         XoshiroSIMD::result_type cluster_id,
+                         std::array<XoshiroSIMD::result_type, XoshiroSIMD::CACHE_SIZE> &cache);
 
 namespace internal {
 

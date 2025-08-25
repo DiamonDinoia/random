@@ -15,7 +15,7 @@ import numpy as np
 import pyrandom
 
 
-def _benchmark(name: str, factory: Callable[[], np.random.Generator], *, size: int = 10_000_000, repeat: int = 3) -> None:
+def _benchmark(name: str, factory: Callable[[], np.random.Generator], *, size: int = 100_000_000, repeat: int = 10) -> None:
     """Benchmark a single generator.
 
     Parameters

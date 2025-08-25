@@ -20,13 +20,13 @@ Original implementation by David Blackman and Sebastiano
 Vigna.
 */
 
-
 #pragma once
 
 #include <array>
 #include <cstdint>
 #include <limits>
 
+#include "inline.hpp"
 #include "splitmix.hpp"
 
 #if __cplusplus >= 202002L
@@ -42,14 +42,14 @@ namespace prng {
 class XoshiroScalar {
 public:
   using result_type = std::uint64_t;
-  static constexpr auto(min)() noexcept { return std::numeric_limits<result_type>::min(); }
-  static constexpr auto(max)() noexcept { return std::numeric_limits<result_type>::max(); }
+  static constexpr PRNG_ALWAYS_INLINE auto(min)() noexcept { return std::numeric_limits<result_type>::min(); }
+  static constexpr PRNG_ALWAYS_INLINE auto(max)() noexcept { return std::numeric_limits<result_type>::max(); }
 
   /**
    * @brief Constructs the XoshiroScalar generator with a given seed.
    * @param seed The seed value.
    */
-  constexpr explicit XoshiroScalar(const result_type seed) noexcept : m_state{} {
+  PRNG_ALWAYS_INLINE constexpr explicit XoshiroScalar(const result_type seed) noexcept : m_state{} {
     SplitMix splitmix{seed};
     for (auto &element : m_state) {
       element = splitmix();
@@ -61,7 +61,8 @@ public:
    * @param seed The seed value.
    * @param thread_id The thread ID.
    */
-  constexpr explicit XoshiroScalar(const result_type seed, const result_type thread_id) noexcept : XoshiroScalar(seed) {
+  PRNG_ALWAYS_INLINE constexpr explicit XoshiroScalar(const result_type seed, const result_type thread_id) noexcept
+      : XoshiroScalar(seed) {
     for (result_type i = 0; i < thread_id; ++i) {
       jump();
     }
@@ -73,7 +74,8 @@ public:
    * @param thread_id The thread ID.
    * @param cluster_id The cluster ID.
    */
-  constexpr explicit XoshiroScalar(const result_type seed, const result_type thread_id, const result_type cluster_id) noexcept
+  PRNG_ALWAYS_INLINE constexpr explicit XoshiroScalar(const result_type seed, const result_type thread_id,
+                                                      const result_type cluster_id) noexcept
       : XoshiroScalar(seed, thread_id) {
     for (result_type i = 0; i < cluster_id; ++i) {
       long_jump();
@@ -84,31 +86,31 @@ public:
    * @brief Generates the next random number.
    * @return The next random number.
    */
-  constexpr result_type(operator())() noexcept { return next(); }
+  PRNG_ALWAYS_INLINE constexpr result_type(operator())() noexcept { return next(); }
 
   /**
    * @brief Generates a uniform random number in the range [0, 1).
    * @return A uniform random number.
    */
-  constexpr double(uniform)() noexcept { return static_cast<double>(next() >> 11) * 0x1.0p-53; }
+  PRNG_ALWAYS_INLINE constexpr double(uniform)() noexcept { return static_cast<double>(next() >> 11) * 0x1.0p-53; }
 
   /**
    * @brief Returns the state of the generator.
    * @return The state of the generator.
    */
-  constexpr std::array<result_type, 4> getState() const { return m_state; }
+  PRNG_ALWAYS_INLINE constexpr std::array<result_type, 4> getState() const noexcept { return m_state; }
 
   /**
    * @brief Returns the size of the state array.
    * @return The size of the state array.
    */
-  static constexpr result_type stateSize() noexcept { return 4; }
+  static constexpr PRNG_ALWAYS_INLINE result_type stateSize() noexcept { return 4; }
 
   /**
    * @brief Jump function for the generator. It is equivalent to 2^128 calls to next().
    * It can be used to generate 2^128 non-overlapping subsequences for parallel computations.
    */
-  constexpr void jump() noexcept {
+  PRNG_ALWAYS_INLINE constexpr void jump() noexcept {
     constexpr result_type JUMP[] = {0x180ec6d33cfd0aba, 0xd5a61266f0c9392c, 0xa9582618e03fc9aa, 0x39abdc4529b1661c};
     result_type s0 = 0;
     result_type s1 = 0;
@@ -135,7 +137,7 @@ public:
    * It can be used to generate 2^64 starting points, from each of which jump() will generate 2^64 non-overlapping
    * subsequences for parallel distributed computations.
    */
-  constexpr void long_jump() noexcept {
+  PRNG_ALWAYS_INLINE constexpr void long_jump() noexcept {
     constexpr result_type LONG_JUMP[] = {0x76e15d3efefdcbbf, 0xc5004e441c522fb3, 0x77710069854ee241,
                                          0x39109bb02acbe635};
     result_type s0 = 0;
@@ -168,7 +170,7 @@ private:
    * @param k The number of bits to rotate.
    * @return The rotated integer.
    */
-  static constexpr auto rotl(const result_type x, const int k) noexcept {
+  static constexpr PRNG_ALWAYS_INLINE auto rotl(const result_type x, const int k) noexcept {
 #if __cplusplus >= 202002L
     return std::rotl(x, k);
 #else
@@ -180,7 +182,7 @@ private:
    * @brief Generates the next state of the generator.
    * @return The next state.
    */
-  constexpr result_type next() noexcept {
+  PRNG_ALWAYS_INLINE constexpr result_type next() noexcept {
     const auto t_shift = m_state[1] << 17;
     const auto result = rotl(m_state[0] + m_state[3], 23) + m_state[0];
 

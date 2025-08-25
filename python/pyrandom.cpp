@@ -1,5 +1,4 @@
 #include <nanobind/nanobind.h>
-#include <nanobind/stl/array.h>
 #include "random/splitmix.hpp"
 #include "random/xoshiro.hpp"
 #include "random/xoshiro_simd.hpp"
@@ -97,6 +96,7 @@ static void xoshiro_bitgen_capsule_free(PyObject *capsule) {
   auto *p = static_cast<XoshiroBitGen *>(PyCapsule_GetPointer(capsule, "BitGenerator"));
   delete p;
 }
+
 
 static nb::object make_xoshiro_bitgenerator(uint64_t seed) {
   auto *payload = new XoshiroBitGen(seed);
