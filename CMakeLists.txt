@@ -74,13 +74,66 @@ set(COMPILE_OPTIONS
 # 1) Detect support
 include(CheckCXXCompilerFlag)
 check_cxx_compiler_flag("-flto=full" COMPILER_SUPPORTS_LTO_FULL)
+check_cxx_compiler_flag("-flto" COMPILER_SUPPORTS_LTO_PLAIN)
+check_cxx_compiler_flag("-flto=thin" COMPILER_SUPPORTS_LTO_THIN)
 check_cxx_compiler_flag("-fimplicit-constexpr" COMPILER_SUPPORTS_FIMPLICIT_CONSTEXPR)
+
+# Devirtualization-related checks
+check_cxx_compiler_flag("-fno-semantic-interposition" COMPILER_SUPPORTS_NO_SEMINT)
+check_cxx_compiler_flag("-fwhole-program-vtables" COMPILER_SUPPORTS_WPV)
+check_cxx_compiler_flag("-fstrict-vtable-pointers" COMPILER_SUPPORTS_STRICT_VTP)
+check_cxx_compiler_flag("-fipa-pta" COMPILER_SUPPORTS_IPA_PTA)
+check_cxx_compiler_flag("-fdevirtualize-at-ltrans" COMPILER_SUPPORTS_DEVIRT_LTRANS)
 
 # 2) Append conditionally to your existing COMPILE_OPTIONS
 list(APPEND COMPILE_OPTIONS
-    $<$<BOOL:${COMPILER_SUPPORTS_FIMPLICIT_CONSTEXPR}>:-fimplicit-constexpr>
-    $<$<AND:$<BOOL:${COMPILER_SUPPORTS_LTO_FULL}>,$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>,$<CONFIG:MinSizeRel>>>:-flto=full>
+        # Already present in your snippet:
+        $<$<BOOL:${COMPILER_SUPPORTS_FIMPLICIT_CONSTEXPR}>:-fimplicit-constexpr>
+
+        # Prefer ThinLTO on Clang/AppleClang when available; fall back to full.
+        $<$<AND:$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>,$<CONFIG:MinSizeRel>>,$<CXX_COMPILER_ID:Clang,AppleClang>,$<BOOL:${COMPILER_SUPPORTS_LTO_THIN}>>:-flto=thin>
+        $<$<AND:$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>,$<CONFIG:MinSizeRel>>,$<CXX_COMPILER_ID:Clang,AppleClang>,$<NOT:$<BOOL:${COMPILER_SUPPORTS_LTO_THIN}>>,$<BOOL:${COMPILER_SUPPORTS_LTO_FULL}>>:-flto=full>
+
+        # GCC LTO
+        $<$<AND:$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>,$<CONFIG:MinSizeRel>>,$<CXX_COMPILER_ID:GNU>,$<BOOL:${COMPILER_SUPPORTS_LTO_PLAIN}>>:-flto>
+
+        # MSVC LTCG (compile side)
+        $<$<AND:$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>,$<CONFIG:MinSizeRel>>,$<CXX_COMPILER_ID:MSVC>>:/GL>
+
+        # Help devirtualization by disabling interposition (GCC/Clang/AppleClang)
+        $<$<AND:$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>,$<CONFIG:MinSizeRel>>,$<BOOL:${COMPILER_SUPPORTS_NO_SEMINT}>,$<CXX_COMPILER_ID:GNU,Clang,AppleClang>>:-fno-semantic-interposition>
+
+        # Clang: whole-program vtables + stricter vtable semantics
+        $<$<AND:$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>,$<CONFIG:MinSizeRel>>,$<CXX_COMPILER_ID:Clang,AppleClang>,$<BOOL:${COMPILER_SUPPORTS_WPV}>>:-fwhole-program-vtables>
+        $<$<AND:$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>,$<CONFIG:MinSizeRel>>,$<CXX_COMPILER_ID:Clang,AppleClang>,$<BOOL:${COMPILER_SUPPORTS_STRICT_VTP}>>:-fstrict-vtable-pointers>
+
+        # GCC: stronger IPA points-to + devirt at LTRANS
+        $<$<AND:$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>,$<CONFIG:MinSizeRel>>,$<CXX_COMPILER_ID:GNU>,$<BOOL:${COMPILER_SUPPORTS_IPA_PTA}>>:-fipa-pta>
+        $<$<AND:$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>,$<CONFIG:MinSizeRel>>,$<CXX_COMPILER_ID:GNU>,$<BOOL:${COMPILER_SUPPORTS_DEVIRT_LTRANS}>>:-fdevirtualize-at-ltrans>
+
+        # Complements -fvisibility=hidden for template inlines (harmless on non-shared too)
+        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-fvisibility-inlines-hidden>
 )
+
+# 3) Linker side (so LTO actually applies)
+#    If you’re already collecting link flags elsewhere, merge these similarly.
+set(LINK_OPTIONS "")
+list(APPEND LINK_OPTIONS
+        # Clang/AppleClang: ThinLTO preferred
+        $<$<AND:$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>,$<CONFIG:MinSizeRel>>,$<CXX_COMPILER_ID:Clang,AppleClang>,$<BOOL:${COMPILER_SUPPORTS_LTO_THIN}>>:-flto=thin>
+        $<$<AND:$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>,$<CONFIG:MinSizeRel>>,$<CXX_COMPILER_ID:Clang,AppleClang>,$<NOT:$<BOOL:${COMPILER_SUPPORTS_LTO_THIN}>>,$<BOOL:${COMPILER_SUPPORTS_LTO_FULL}>>:-flto=full>
+
+        # GCC: plain LTO
+        $<$<AND:$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>,$<CONFIG:MinSizeRel>>,$<CXX_COMPILER_ID:GNU>,$<BOOL:${COMPILER_SUPPORTS_LTO_PLAIN}>>:-flto>
+
+        # MSVC: LTCG at link + disable incremental to avoid conflicts
+        $<$<AND:$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>,$<CONFIG:MinSizeRel>>,$<CXX_COMPILER_ID:MSVC>>:/LTCG /INCREMENTAL:NO>
+)
+
+# Apply (example)
+# target_compile_options(your_target PRIVATE ${COMPILE_OPTIONS})
+# target_link_options(your_target PRIVATE ${LINK_OPTIONS})
+
 
 add_library(random STATIC src/xoshiro_simd.cpp)
 target_include_directories(random PUBLIC
@@ -90,9 +143,7 @@ target_include_directories(random PUBLIC
 target_link_libraries(random PUBLIC xsimd)
 set_target_properties(random PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_compile_options(random PRIVATE ${COMPILE_OPTIONS})
-target_link_options(random PRIVATE
-        $<$<AND:$<BOOL:${COMPILER_SUPPORTS_LTO_FULL}>,$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>,$<CONFIG:MinSizeRel>>>:-flto=full>
-)
+target_link_options(random PRIVATE ${LINK_OPTIONS})
 
 foreach (MARCH_VERSION IN ITEMS x86-64 x86-64-v2 x86-64-v3 x86-64-v4)
     string(REPLACE "-" "_" TARGET_SUFFIX "${MARCH_VERSION}")

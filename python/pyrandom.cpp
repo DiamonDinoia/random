@@ -1,7 +1,9 @@
 #include <nanobind/nanobind.h>
+#include <nanobind/stl/array.h>
 #include "random/splitmix.hpp"
 #include "random/xoshiro.hpp"
 #include "random/xoshiro_simd.hpp"
+#include "random/macros.hpp"
 #include <numpy/random/bitgen.h>
 
 namespace nb = nanobind;
@@ -9,10 +11,10 @@ using namespace prng;
 
 class PySplitMix {
 public:
-  PySplitMix(uint64_t seed) : gen(seed) {}
-  uint64_t random_raw() { return gen(); }
-  uint64_t get_state() const { return gen.getState(); }
-  void set_state(uint64_t state) { gen.setState(state); }
+  PRNG_ALWAYS_INLINE constexpr explicit PySplitMix(uint64_t seed) noexcept : gen(seed) {}
+  PRNG_ALWAYS_INLINE constexpr uint64_t random_raw() noexcept { return gen(); }
+  PRNG_ALWAYS_INLINE constexpr uint64_t get_state() const noexcept { return gen.getState(); }
+  PRNG_ALWAYS_INLINE constexpr void set_state(uint64_t state) noexcept { gen.setState(state); }
 
 private:
   SplitMix gen;
@@ -21,29 +23,29 @@ private:
 struct SplitMixBitGen {
   bitgen_t table;
   SplitMix rng;
-  explicit SplitMixBitGen(uint64_t seed) : table{}, rng(seed) {}
+  PRNG_ALWAYS_INLINE explicit SplitMixBitGen(uint64_t seed) noexcept : table{}, rng(seed) {}
 };
 
-static uint64_t splitmix_uint64(void *state) {
+PRNG_ALWAYS_INLINE uint64_t splitmix_uint64(void *state) noexcept {
   return static_cast<SplitMixBitGen *>(state)->rng();
 }
 
-static uint32_t splitmix_uint32(void *state) {
+PRNG_ALWAYS_INLINE uint32_t splitmix_uint32(void *state) noexcept {
   return static_cast<uint32_t>(splitmix_uint64(state) >> 32);
 }
 
-static double splitmix_double(void *state) {
+PRNG_ALWAYS_INLINE double splitmix_double(void *state) noexcept {
   return static_cast<double>(splitmix_uint64(state) >> 11) * 0x1.0p-53;
 }
 
-static uint64_t splitmix_raw(void *state) { return splitmix_uint64(state); }
+PRNG_ALWAYS_INLINE uint64_t splitmix_raw(void *state) noexcept { return splitmix_uint64(state); }
 
-static void splitmix_bitgen_capsule_free(PyObject *capsule) {
+PRNG_ALWAYS_INLINE void splitmix_bitgen_capsule_free(PyObject *capsule) noexcept {
   auto *p = static_cast<SplitMixBitGen *>(PyCapsule_GetPointer(capsule, "BitGenerator"));
   delete p;
 }
 
-static nb::object make_splitmix_bitgenerator(uint64_t seed) {
+PRNG_ALWAYS_INLINE nb::object make_splitmix_bitgenerator(uint64_t seed) {
   auto *payload = new SplitMixBitGen(seed);
   payload->table.state = payload;
   payload->table.next_uint64 = splitmix_uint64;
@@ -58,15 +60,15 @@ static nb::object make_splitmix_bitgenerator(uint64_t seed) {
 // Wrapper around the Xoshiro generator
 class PyXoshiroNative {
 public:
-  PyXoshiroNative(uint64_t seed) : rng(seed) {}
-  PyXoshiroNative(uint64_t seed, uint64_t thread) : rng(seed, thread) {}
-  PyXoshiroNative(uint64_t seed, uint64_t thread, uint64_t cluster) : rng(seed, thread, cluster) {}
+  PRNG_ALWAYS_INLINE explicit PyXoshiroNative(uint64_t seed) noexcept : rng(seed) {}
+  PRNG_ALWAYS_INLINE PyXoshiroNative(uint64_t seed, uint64_t thread) noexcept : rng(seed, thread) {}
+  PRNG_ALWAYS_INLINE PyXoshiroNative(uint64_t seed, uint64_t thread, uint64_t cluster) noexcept : rng(seed, thread, cluster) {}
 
-  uint64_t random_raw() { return rng(); }
-  double uniform() { return rng.uniform(); }
-  std::array<uint64_t, 4> get_state() const { return rng.getState(0); }
-  void jump() { rng.jump(); }
-  void long_jump() { rng.long_jump(); }
+  PRNG_ALWAYS_INLINE uint64_t random_raw() noexcept { return rng(); }
+  PRNG_ALWAYS_INLINE double uniform() noexcept { return rng.uniform(); }
+  PRNG_ALWAYS_INLINE std::array<uint64_t, 4> get_state() const noexcept { return rng.getState(0); }
+  PRNG_ALWAYS_INLINE void jump() noexcept { rng.jump(); }
+  PRNG_ALWAYS_INLINE void long_jump() noexcept { rng.long_jump(); }
 
 private:
   XoshiroNative rng;
@@ -75,30 +77,29 @@ private:
 struct XoshiroBitGen {
   bitgen_t table;
   Xoshiro rng;
-  explicit XoshiroBitGen(uint64_t seed) : table{}, rng(seed) {}
+  PRNG_ALWAYS_INLINE explicit XoshiroBitGen(uint64_t seed) noexcept : table{}, rng(seed) {}
 };
 
-static uint64_t xoshiro_uint64(void *state) {
+PRNG_ALWAYS_INLINE uint64_t xoshiro_uint64(void *state) noexcept {
   return static_cast<XoshiroBitGen *>(state)->rng();
 }
 
-static uint32_t xoshiro_uint32(void *state) {
+PRNG_ALWAYS_INLINE uint32_t xoshiro_uint32(void *state) noexcept {
   return static_cast<uint32_t>(xoshiro_uint64(state) >> 32);
 }
 
-static double xoshiro_double(void *state) {
+PRNG_ALWAYS_INLINE double xoshiro_double(void *state) noexcept {
   return static_cast<XoshiroBitGen *>(state)->rng.uniform();
 }
 
-static uint64_t xoshiro_raw(void *state) { return xoshiro_uint64(state); }
+PRNG_ALWAYS_INLINE uint64_t xoshiro_raw(void *state) noexcept { return xoshiro_uint64(state); }
 
-static void xoshiro_bitgen_capsule_free(PyObject *capsule) {
+PRNG_ALWAYS_INLINE void xoshiro_bitgen_capsule_free(PyObject *capsule) noexcept {
   auto *p = static_cast<XoshiroBitGen *>(PyCapsule_GetPointer(capsule, "BitGenerator"));
   delete p;
 }
 
-
-static nb::object make_xoshiro_bitgenerator(uint64_t seed) {
+PRNG_ALWAYS_INLINE nb::object make_xoshiro_bitgenerator(uint64_t seed) {
   auto *payload = new XoshiroBitGen(seed);
   payload->table.state = payload;
   payload->table.next_uint64 = xoshiro_uint64;
@@ -112,14 +113,14 @@ static nb::object make_xoshiro_bitgenerator(uint64_t seed) {
 
 class PyXoshiroSIMD {
 public:
-  PyXoshiroSIMD(uint64_t seed) : rng(seed) {}
-  PyXoshiroSIMD(uint64_t seed, uint64_t thread) : rng(seed, thread) {}
-  PyXoshiroSIMD(uint64_t seed, uint64_t thread, uint64_t cluster) : rng(seed, thread, cluster) {}
+  PRNG_ALWAYS_INLINE explicit PyXoshiroSIMD(uint64_t seed) noexcept : rng(seed) {}
+  PRNG_ALWAYS_INLINE PyXoshiroSIMD(uint64_t seed, uint64_t thread) noexcept : rng(seed, thread) {}
+  PRNG_ALWAYS_INLINE PyXoshiroSIMD(uint64_t seed, uint64_t thread, uint64_t cluster) noexcept : rng(seed, thread, cluster) {}
 
-  uint64_t random_raw() { return rng(); }
-  double uniform() { return rng.uniform(); }
-  void jump() { rng.jump(); }
-  void long_jump() { rng.long_jump(); }
+  PRNG_ALWAYS_INLINE uint64_t random_raw() noexcept { return rng(); }
+  PRNG_ALWAYS_INLINE double uniform() noexcept { return rng.uniform(); }
+  PRNG_ALWAYS_INLINE void jump() noexcept { rng.jump(); }
+  PRNG_ALWAYS_INLINE void long_jump() noexcept { rng.long_jump(); }
 
 private:
   XoshiroSIMD rng;

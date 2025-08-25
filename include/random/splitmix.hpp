@@ -23,7 +23,7 @@ Ported to C++ by Marco Barbone. Original implementation by Guy Steele.
 #include <cstdint>
 #include <limits>
 
-#include "inline.hpp"
+#include "macros.hpp"
 
 namespace prng {
 

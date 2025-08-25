@@ -26,7 +26,7 @@ Vigna.
 #include <cstdint>
 #include <limits>
 
-#include "inline.hpp"
+#include "macros.hpp"
 #include "splitmix.hpp"
 
 #if __cplusplus >= 202002L

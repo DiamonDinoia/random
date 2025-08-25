@@ -28,7 +28,7 @@ Vigna.
 
 #include <xsimd/xsimd.hpp>
 
-#include "inline.hpp"
+#include "macros.hpp"
 #include "xoshiro_scalar.hpp"
 
 namespace prng {
@@ -213,7 +213,7 @@ private:
    * @return The next state.
    */
   PRNG_ALWAYS_INLINE constexpr auto next() noexcept {
-    const auto result = rotl(m_state[0] + m_state[3], 23) + m_state[0];
+    const auto result = xsimd::rotl(m_state[0] + m_state[3], 23) + m_state[0];
     const auto t = m_state[1] << 17;
 
     m_state[2] ^= m_state[0];
@@ -233,7 +233,7 @@ private:
    *
    * @tparam Is The indices of the cache.
    */
-  template <size_t... Is> constexpr void unroll_populate(std::index_sequence<Is...>) noexcept {
+  template <size_t... Is> PRNG_ALWAYS_INLINE constexpr void unroll_populate(std::index_sequence<Is...>) noexcept {
     (next().store_aligned(m_cache.data() + Is * SIMD_WIDTH), ...);
   }
 
