@@ -90,10 +90,21 @@ public:
    */
   PRNG_ALWAYS_INLINE constexpr explicit XoshiroSIMDImpl(const result_type seed, const result_type thread_id,
                                                         std::array<result_type, CACHE_SIZE> &cache) noexcept
-      : XoshiroSIMDImpl(seed, cache) {
-    for (result_type i = 0; i < thread_id; ++i) {
-      jump();
+      : m_cache(cache), m_state{}, m_index{0} {
+    XoshiroScalar rng{seed};
+
+    // Skip whole blocks for previous threads
+    for (uint64_t k = 0; k < uint64_t(thread_id) * SIMD_WIDTH; ++k)
+      rng.jump();
+
+    std::array<std::array<result_type, SIMD_WIDTH>, RNG_WIDTH> states{};
+    for (uint32_t i = 0; i < SIMD_WIDTH; ++i) {
+      for (uint32_t j = 0; j < RNG_WIDTH; ++j)
+        states[j][i] = rng.getState()[j];
+      rng.jump(); // next lane
     }
+    for (uint32_t j = 0; j < RNG_WIDTH; ++j)
+      m_state[j] = simd_type::load_unaligned(states[j].data());
   }
 
   /**
