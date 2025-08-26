@@ -90,21 +90,10 @@ public:
    */
   PRNG_ALWAYS_INLINE constexpr explicit XoshiroSIMDImpl(const result_type seed, const result_type thread_id,
                                                         std::array<result_type, CACHE_SIZE> &cache) noexcept
-      : m_cache(cache), m_state{}, m_index{0} {
-    XoshiroScalar rng{seed};
-
-    // Skip whole blocks for previous threads
-    for (uint64_t k = 0; k < uint64_t(thread_id) * SIMD_WIDTH; ++k)
-      rng.jump();
-
-    std::array<std::array<result_type, SIMD_WIDTH>, RNG_WIDTH> states{};
-    for (uint32_t i = 0; i < SIMD_WIDTH; ++i) {
-      for (uint32_t j = 0; j < RNG_WIDTH; ++j)
-        states[j][i] = rng.getState()[j];
-      rng.jump(); // next lane
+      : XoshiroSIMDImpl(seed, cache) {
+    for (result_type i = 0; i < thread_id; ++i) {
+      mid_jump();
     }
-    for (uint32_t j = 0; j < RNG_WIDTH; ++j)
-      m_state[j] = simd_type::load_unaligned(states[j].data());
   }
 
   /**
@@ -186,7 +175,33 @@ public:
   }
 
   /**
-   * Long-jump function for the generator. It is equivalent to 2^192 calls to next().
+   * @brief Jump function for the generator. It is equivalent to 2^160 calls to next().
+   * It can be used to generate 2^96 non-overlapping subsequences for parallel computations.
+   */
+  PRNG_ALWAYS_INLINE constexpr void mid_jump() noexcept {
+    constexpr result_type MID_JUMP[] = {0xc04b4f9c5d26c200, 0x69e6e6e431a2d40b, 0x4823b45b89dc689c, 0xf567382197055bf0};
+    simd_type s0(0);
+    simd_type s1(0);
+    simd_type s2(0);
+    simd_type s3(0);
+    for (const auto i : MID_JUMP)
+      for (auto b = 0; b < 64; b++) {
+        if (i & result_type{1} << b) {
+          s0 ^= m_state[0];
+          s1 ^= m_state[1];
+          s2 ^= m_state[2];
+          s3 ^= m_state[3];
+        }
+        next();
+      }
+    m_state[0] = s0;
+    m_state[1] = s1;
+    m_state[2] = s2;
+    m_state[3] = s3;
+  }
+
+  /**
+   * @brief Long-jump function for the generator. It is equivalent to 2^192 calls to next().
    * It can be used to generate 2^64 starting points, from each of which jump() will generate 2^64 non-overlapping
    * subsequences for parallel distributed computations.
    */

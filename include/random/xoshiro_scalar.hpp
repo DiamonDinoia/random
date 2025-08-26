@@ -108,10 +108,36 @@ public:
 
   /**
    * @brief Jump function for the generator. It is equivalent to 2^128 calls to next().
-   * It can be used to generate 2^128 non-overlapping subsequences for parallel computations.
+   * It can be used to generate 2^128 non-overlapping subsequences for simd computations.
    */
   PRNG_ALWAYS_INLINE constexpr void jump() noexcept {
     constexpr result_type JUMP[] = {0x180ec6d33cfd0aba, 0xd5a61266f0c9392c, 0xa9582618e03fc9aa, 0x39abdc4529b1661c};
+    result_type s0 = 0;
+    result_type s1 = 0;
+    result_type s2 = 0;
+    result_type s3 = 0;
+    for (const auto i : JUMP)
+      for (auto b = 0; b < 64; b++) {
+        if (i & result_type{1} << b) {
+          s0 ^= m_state[0];
+          s1 ^= m_state[1];
+          s2 ^= m_state[2];
+          s3 ^= m_state[3];
+        }
+        next();
+      }
+    m_state[0] = s0;
+    m_state[1] = s1;
+    m_state[2] = s2;
+    m_state[3] = s3;
+  }
+
+  /**
+   * @brief Jump function for the generator. It is equivalent to 2^160 calls to next().
+   * It can be used to generate 2^96 non-overlapping subsequences for parallel computations.
+   */
+  PRNG_ALWAYS_INLINE constexpr void mid_jump() noexcept {
+    constexpr result_type JUMP[] = {0xc04b4f9c5d26c200, 0x69e6e6e431a2d40b, 0x4823b45b89dc689c, 0xf567382197055bf0};
     result_type s0 = 0;
     result_type s1 = 0;
     result_type s2 = 0;
