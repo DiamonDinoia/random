@@ -223,7 +223,7 @@ private:
 
     m_state[2] ^= t;
 
-    m_state[3] = rotl(m_state[3], 45);
+    m_state[3] = xsimd::rotl(m_state[3], 45);
 
     return result;
   }

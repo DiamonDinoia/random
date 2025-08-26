@@ -23,6 +23,7 @@ uint64_t reference_next() {
 
 static constexpr auto iterations = 1;
 int main() {
+  using namespace std::chrono_literals;
   volatile const auto seed = 42;
   std::cout << "SEED: " << seed << std::endl;
   prng::XoshiroNative rng(seed);
@@ -37,7 +38,7 @@ int main() {
   std::uniform_real_distribution<double> double_dist(0.0, 1.0);
   std::mt19937_64 mt(seed);
   using ankerl::nanobench::doNotOptimizeAway;
-  ankerl::nanobench::Bench().minEpochIterations(1 << 20)
+  ankerl::nanobench::Bench().minEpochTime(20ms).batch(iterations)
   .run("Reference Xoshiro UINT64", [&] {
      for (int i = 0; i < iterations; ++i) doNotOptimizeAway(reference_next());
   }).run("XoshiroSIMD UINT64", [&] {

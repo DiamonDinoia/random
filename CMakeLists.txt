@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.16)
 project(random VERSION 0.1 LANGUAGES CXX)
 
 set(CPM_DOWNLOAD_VERSION 0.40.6)
-set(XSIMD_DOWNLOAD_VERSION 13.2.0)
+set(XSIMD_DOWNLOAD_VERSION master)
 
 option(ENABLE_TESTS "Enable tests" ON)
 option(ENABLE_PYTHON "Enable Python bindings" ON)
@@ -35,105 +35,96 @@ CPMAddPackage(
         EXCLUDE_FROM_ALL YES
 )
 
-# cmake
-set(COMPILE_OPTIONS
-        # Common warnings and sane defaults
-        $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Wpedantic -Wformat=2 -Wformat-security -fvisibility=hidden>
-        $<$<CXX_COMPILER_ID:AppleClang>:-Wall -Wextra -Wpedantic -Wformat=2 -Wformat-security -fvisibility=hidden>
-        $<$<CXX_COMPILER_ID:MSVC>:/W4 /permissive- /EHsc /Zc:__cplusplus /Zc:throwingNew /utf-8 /MP>
-
-        # Debug: full debug info, frame pointers for profiling, strong stack protector,
-        # and extra libstdc++ assertions on GNU/Clang.
-        $<$<CONFIG:Debug>:
-        $<$<CXX_COMPILER_ID:GNU,Clang>:-O0 -g3 -fno-omit-frame-pointer -fstack-protector-strong -D_GLIBCXX_ASSERTIONS>
-        $<$<CXX_COMPILER_ID:AppleClang>:-O0 -g3 -fno-omit-frame-pointer -fstack-protector-strong>
-        $<$<CXX_COMPILER_ID:MSVC>:/Od /Zi /RTC1>
-        >
-
-        # RelWithDebInfo: optimized with debug info, keep frame pointers, harden, and disable asserts.
-        $<$<CONFIG:RelWithDebInfo>:
-        $<$<CXX_COMPILER_ID:GNU,Clang>:-O2 -g -fno-omit-frame-pointer -fstack-protector-strong -DNDEBUG -D_FORTIFY_SOURCE=2>
-        $<$<CXX_COMPILER_ID:AppleClang>:-O2 -g -fno-omit-frame-pointer -fstack-protector-strong -DNDEBUG>
-        $<$<CXX_COMPILER_ID:MSVC>:/O2 /Zi /Gy /DNDEBUG>
-        >
-
-        # Release: maximum performance and harden.
-        $<$<CONFIG:Release>:
-        $<$<CXX_COMPILER_ID:GNU,Clang>:-O3 -DNDEBUG -D_FORTIFY_SOURCE=2>
-        $<$<CXX_COMPILER_ID:AppleClang>:-O3 -DNDEBUG>
-        $<$<CXX_COMPILER_ID:MSVC>:/O2 /Gy /DNDEBUG>
-        >
-
-        # MinSizeRel: prioritize size, still harden.
-        $<$<CONFIG:MinSizeRel>:
-        $<$<CXX_COMPILER_ID:GNU,Clang>:-Os -DNDEBUG -D_FORTIFY_SOURCE=2>
-        $<$<CXX_COMPILER_ID:AppleClang>:-Oz -DNDEBUG>
-        $<$<CXX_COMPILER_ID:MSVC>:/O1 /Gy /DNDEBUG>
-        >
-)
-# 1) Detect support
 include(CheckCXXCompilerFlag)
-check_cxx_compiler_flag("-flto=full" COMPILER_SUPPORTS_LTO_FULL)
-check_cxx_compiler_flag("-flto" COMPILER_SUPPORTS_LTO_PLAIN)
-check_cxx_compiler_flag("-flto=thin" COMPILER_SUPPORTS_LTO_THIN)
-check_cxx_compiler_flag("-fimplicit-constexpr" COMPILER_SUPPORTS_FIMPLICIT_CONSTEXPR)
+include(CheckLinkerFlag)
 
-# Devirtualization-related checks
-check_cxx_compiler_flag("-fno-semantic-interposition" COMPILER_SUPPORTS_NO_SEMINT)
-check_cxx_compiler_flag("-fwhole-program-vtables" COMPILER_SUPPORTS_WPV)
-check_cxx_compiler_flag("-fstrict-vtable-pointers" COMPILER_SUPPORTS_STRICT_VTP)
-check_cxx_compiler_flag("-fipa-pta" COMPILER_SUPPORTS_IPA_PTA)
-check_cxx_compiler_flag("-fdevirtualize-at-ltrans" COMPILER_SUPPORTS_DEVIRT_LTRANS)
+function(add_compile_flags_if_supported OUTVAR)
+    foreach (flag ${ARGN})
+        string(MAKE_C_IDENTIFIER "HAS_${flag}" var)   # e.g. -fno-plt -> HAS__FNO_PLT
+        check_cxx_compiler_flag("${flag}" ${var})
+        if (${var})
+            list(APPEND ${OUTVAR} "${flag}")
+        endif ()
+    endforeach ()
+    set(${OUTVAR} "${${OUTVAR}}" PARENT_SCOPE)
+endfunction()
 
-# 2) Append conditionally to your existing COMPILE_OPTIONS
-list(APPEND COMPILE_OPTIONS
-        # Already present in your snippet:
-        $<$<BOOL:${COMPILER_SUPPORTS_FIMPLICIT_CONSTEXPR}>:-fimplicit-constexpr>
+function(add_link_flags_if_supported OUTVAR)
+    foreach (flag ${ARGN})
+        string(MAKE_C_IDENTIFIER "HAS_LNK_${flag}" var)
+        check_linker_flag(CXX "${flag}" ${var})
+        if (${var})
+            list(APPEND ${OUTVAR} "${flag}")
+        endif ()
+    endforeach ()
+    set(${OUTVAR} "${${OUTVAR}}" PARENT_SCOPE)
+endfunction()
 
-        # Prefer ThinLTO on Clang/AppleClang when available; fall back to full.
-        $<$<AND:$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>,$<CONFIG:MinSizeRel>>,$<CXX_COMPILER_ID:Clang,AppleClang>,$<BOOL:${COMPILER_SUPPORTS_LTO_THIN}>>:-flto=thin>
-        $<$<AND:$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>,$<CONFIG:MinSizeRel>>,$<CXX_COMPILER_ID:Clang,AppleClang>,$<NOT:$<BOOL:${COMPILER_SUPPORTS_LTO_THIN}>>,$<BOOL:${COMPILER_SUPPORTS_LTO_FULL}>>:-flto=full>
+# --- choose flags (no PGO, no -march) ---
+set(PERF_COMPILE_FLAGS "")
+set(PERF_LINK_FLAGS "")
 
-        # GCC LTO
-        $<$<AND:$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>,$<CONFIG:MinSizeRel>>,$<CXX_COMPILER_ID:GNU>,$<BOOL:${COMPILER_SUPPORTS_LTO_PLAIN}>>:-flto>
+# LTO: prefer thin/full if available, else plain
+check_cxx_compiler_flag("-flto=thin" HAS_LTO_THIN)
+check_cxx_compiler_flag("-flto=full" HAS_LTO_FULL)
+check_cxx_compiler_flag("-flto" HAS_LTO)
 
-        # MSVC LTCG (compile side)
-        $<$<AND:$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>,$<CONFIG:MinSizeRel>>,$<CXX_COMPILER_ID:MSVC>>:/GL>
+if (HAS_LTO_THIN)
+    list(APPEND PERF_COMPILE_FLAGS -flto=thin)
+elseif (HAS_LTO_FULL)
+    list(APPEND PERF_COMPILE_FLAGS -flto=full)
+elseif (HAS_LTO)
+    list(APPEND PERF_COMPILE_FLAGS -flto)
+endif ()
 
-        # Help devirtualization by disabling interposition (GCC/Clang/AppleClang)
-        $<$<AND:$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>,$<CONFIG:MinSizeRel>>,$<BOOL:${COMPILER_SUPPORTS_NO_SEMINT}>,$<CXX_COMPILER_ID:GNU,Clang,AppleClang>>:-fno-semantic-interposition>
+# MSVC compile-side LTCG (harmless elsewhere because of the check)
+add_compile_flags_if_supported(PERF_COMPILE_FLAGS /GL)
 
-        # Clang: whole-program vtables + stricter vtable semantics
-        $<$<AND:$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>,$<CONFIG:MinSizeRel>>,$<CXX_COMPILER_ID:Clang,AppleClang>,$<BOOL:${COMPILER_SUPPORTS_WPV}>>:-fwhole-program-vtables>
-        $<$<AND:$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>,$<CONFIG:MinSizeRel>>,$<CXX_COMPILER_ID:Clang,AppleClang>,$<BOOL:${COMPILER_SUPPORTS_STRICT_VTP}>>:-fstrict-vtable-pointers>
-
-        # GCC: stronger IPA points-to + devirt at LTRANS
-        $<$<AND:$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>,$<CONFIG:MinSizeRel>>,$<CXX_COMPILER_ID:GNU>,$<BOOL:${COMPILER_SUPPORTS_IPA_PTA}>>:-fipa-pta>
-        $<$<AND:$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>,$<CONFIG:MinSizeRel>>,$<CXX_COMPILER_ID:GNU>,$<BOOL:${COMPILER_SUPPORTS_DEVIRT_LTRANS}>>:-fdevirtualize-at-ltrans>
-
-        # Complements -fvisibility=hidden for template inlines (harmless on non-shared too)
-        $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-fvisibility-inlines-hidden>
+# Devirtualization helpers + DCE/ICF enablers (compiler side)
+add_compile_flags_if_supported(PERF_COMPILE_FLAGS
+        -fno-semantic-interposition
+        -fwhole-program-vtables
+        -fstrict-vtable-pointers
+        -fipa-pta
+        -fdevirtualize-at-ltrans
+        -ffunction-sections -fdata-sections
+        -fvisibility-inlines-hidden
+        -funroll-loops
+        -fpeel-loops
+        -funswitch-loops
 )
 
-# 3) Linker side (so LTO actually applies)
-#    If you’re already collecting link flags elsewhere, merge these similarly.
+# ELF niceties
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    add_compile_flags_if_supported(PERF_COMPILE_FLAGS -fno-plt -fuse-ld=lld)
+endif ()
+
+# Link-time: make GC/ICF effective, LTO at link, platform trims
+add_link_flags_if_supported(PERF_LINK_FLAGS
+        -Wl,--gc-sections
+        -Wl,--icf=all
+        -Wl,-dead_strip   # macOS ld64
+        /LTCG /OPT:ICF /OPT:REF /INCREMENTAL:NO  # MSVC
+)
+
+# Mirror LTO to the linker (pick the same style as compile)
+if (HAS_LTO_THIN)
+    add_link_flags_if_supported(PERF_LINK_FLAGS -flto=thin)
+elseif (HAS_LTO_FULL)
+    add_link_flags_if_supported(PERF_LINK_FLAGS -flto=full)
+elseif (HAS_LTO)
+    add_link_flags_if_supported(PERF_LINK_FLAGS -flto)
+endif ()
+
+# --- wire into your existing lists (only for optimized configs) ---
+list(APPEND COMPILE_OPTIONS
+        $<$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>,$<CONFIG:MinSizeRel>>:${PERF_COMPILE_FLAGS}>
+)
+
 set(LINK_OPTIONS "")
 list(APPEND LINK_OPTIONS
-        # Clang/AppleClang: ThinLTO preferred
-        $<$<AND:$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>,$<CONFIG:MinSizeRel>>,$<CXX_COMPILER_ID:Clang,AppleClang>,$<BOOL:${COMPILER_SUPPORTS_LTO_THIN}>>:-flto=thin>
-        $<$<AND:$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>,$<CONFIG:MinSizeRel>>,$<CXX_COMPILER_ID:Clang,AppleClang>,$<NOT:$<BOOL:${COMPILER_SUPPORTS_LTO_THIN}>>,$<BOOL:${COMPILER_SUPPORTS_LTO_FULL}>>:-flto=full>
-
-        # GCC: plain LTO
-        $<$<AND:$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>,$<CONFIG:MinSizeRel>>,$<CXX_COMPILER_ID:GNU>,$<BOOL:${COMPILER_SUPPORTS_LTO_PLAIN}>>:-flto>
-
-        # MSVC: LTCG at link + disable incremental to avoid conflicts
-        $<$<AND:$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>,$<CONFIG:MinSizeRel>>,$<CXX_COMPILER_ID:MSVC>>:/LTCG /INCREMENTAL:NO>
+        $<$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>,$<CONFIG:MinSizeRel>>:${PERF_LINK_FLAGS}>
 )
-
-# Apply (example)
-# target_compile_options(your_target PRIVATE ${COMPILE_OPTIONS})
-# target_link_options(your_target PRIVATE ${LINK_OPTIONS})
-
 
 add_library(random STATIC src/xoshiro_simd.cpp)
 target_include_directories(random PUBLIC
