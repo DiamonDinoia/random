@@ -30,10 +30,14 @@ def _benchmark(name: str, factory: Callable[[], np.random.Generator], *, size: i
         Number of times the benchmark is repeated. The best time is reported.
     """
     timings = []
+    # preallocate output to avoid timing allocations
+    out = np.empty(size, dtype=np.float64)
     for _ in range(repeat):
         rng = factory()
+        # optional warmup to trigger JIT/dispatch caches, etc.
+        rng.random(1, out=out[:1])
         start = time.perf_counter()
-        rng.random(size)
+        rng.random(size, out=out)  # bulk fill via NumPy's path
         timings.append(time.perf_counter() - start)
     best = min(timings)
     rate = size / best
@@ -42,10 +46,10 @@ def _benchmark(name: str, factory: Callable[[], np.random.Generator], *, size: i
 
 def main() -> None:
     generators: Dict[str, Callable[[], np.random.Generator]] = {
+        "Philox": lambda: np.random.Generator(np.random.Philox(1234)),
         "XoshiroSIMD": lambda: pyrandom.XoshiroSIMD(1234),
         "PCG64": lambda: np.random.Generator(np.random.PCG64(1234)),
-        "PCG64DXSM": lambda: np.random.Generator(np.random.PCG64DXSM(1234)),
-        "Philox": lambda: np.random.Generator(np.random.Philox(1234)),
+        "XoshiroNative": lambda: pyrandom.XoshiroNative(1234),
         "MT19937": lambda: np.random.Generator(np.random.MT19937(1234)),
         "default_rng": lambda: np.random.default_rng(1234),
     }

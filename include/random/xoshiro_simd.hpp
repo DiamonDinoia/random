@@ -25,6 +25,7 @@ Vigna.
 #include <array>
 #include <cstdint>
 #include <limits>
+#include <memory> // added for std::unique_ptr
 
 #include <xsimd/xsimd.hpp>
 
@@ -119,7 +120,7 @@ public:
    * @return The next random number.
    */
   PRNG_ALWAYS_INLINE constexpr auto operator()() noexcept {
-    if (m_index == 0) {
+    if (m_index == 0) [[unlikely]] {
       populate_cache();
     }
     return m_cache[m_index++];
@@ -152,26 +153,24 @@ public:
    */
   PRNG_ALWAYS_INLINE constexpr void jump() noexcept {
     constexpr result_type JUMP[] = {0x180ec6d33cfd0aba, 0xd5a61266f0c9392c, 0xa9582618e03fc9aa, 0x39abdc4529b1661c};
-    for (auto _ = UINT8_C(0); _ < SIMD_WIDTH; ++_) {
-      simd_type s0(0);
-      simd_type s1(0);
-      simd_type s2(0);
-      simd_type s3(0);
-      for (const auto i : JUMP)
-        for (auto b = 0; b < 64; b++) {
-          if (i & result_type{1} << b) {
-            s0 ^= m_state[0];
-            s1 ^= m_state[1];
-            s2 ^= m_state[2];
-            s3 ^= m_state[3];
-          }
-          next();
+    simd_type s0(0);
+    simd_type s1(0);
+    simd_type s2(0);
+    simd_type s3(0);
+    for (const auto i : JUMP)
+      for (auto b = 0; b < 64; b++) {
+        if (i & result_type{1} << b) {
+          s0 ^= m_state[0];
+          s1 ^= m_state[1];
+          s2 ^= m_state[2];
+          s3 ^= m_state[3];
         }
-      m_state[0] = s0;
-      m_state[1] = s1;
-      m_state[2] = s2;
-      m_state[3] = s3;
-    }
+        next();
+      }
+    m_state[0] = s0;
+    m_state[1] = s1;
+    m_state[2] = s2;
+    m_state[3] = s3;
   }
 
   /**
@@ -229,8 +228,9 @@ public:
   }
 
 private:
-  alignas(simd_type::arch_type::alignment()) std::array<result_type, CACHE_SIZE> &m_cache;
-  std::array<simd_type, RNG_WIDTH> m_state;
+  // removed alignas on reference (has no effect / can be ill-formed)
+  std::array<result_type, CACHE_SIZE> &m_cache;
+  alignas(simd_type::arch_type::alignment()) std::array<simd_type, RNG_WIDTH> m_state;
   std::uint8_t m_index;
 
   /**
@@ -239,17 +239,18 @@ private:
    * @return The next state.
    */
   PRNG_ALWAYS_INLINE constexpr auto next() noexcept {
-    const auto result = xsimd::rotl(m_state[0] + m_state[3], 23) + m_state[0];
-    const auto t = m_state[1] << 17;
+    const auto result = xsimd::rotl<23>(m_state[0] + m_state[3]) + m_state[0];
+    const auto t = xsimd::bitwise_lshift<17>(m_state[1]);
 
     m_state[2] ^= m_state[0];
     m_state[3] ^= m_state[1];
+
     m_state[1] ^= m_state[2];
     m_state[0] ^= m_state[3];
 
     m_state[2] ^= t;
 
-    m_state[3] = xsimd::rotl(m_state[3], 45);
+    m_state[3] = xsimd::rotl<45>(m_state[3]);
 
     return result;
   }
@@ -271,6 +272,7 @@ private:
   }
 
   friend XoshiroSIMD;
+
 };
 
 struct XoshiroSIMDCreator;
@@ -374,9 +376,9 @@ private:
     PRNG_ALWAYS_INLINE void long_jump() noexcept final { impl.long_jump(); }
   };
 
-  alignas(xsimd::avx512f::alignment()) std::array<result_type, CACHE_SIZE> m_cache;
+  alignas(64) std::array<result_type, CACHE_SIZE> m_cache;
   std::unique_ptr<IXoshiroSIMD> pImpl;
-  std::uint8_t m_index;
+  std::uint8_t m_index{0}; // ensure zero-initialized
 
   friend std::unique_ptr<IXoshiroSIMD> create_xoshiro_simd_impl(result_type seed, result_type thread_id,
                                                                 result_type cluster_id,

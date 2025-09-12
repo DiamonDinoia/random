@@ -12,7 +12,7 @@
 #if defined(_MSC_VER)
 #  define PRNG_NEVER_INLINE __declspec(noinline)
 #elif defined(__GNUC__) || defined(__clang__)
-#  define PRNG_NEVER_INLINE __attribute__((noinline))
+#  define PRNG_NEVER_INLINE __attribute__((cold,noinline))
 #else
 #  define PRNG_NEVER_INLINE
 #endif

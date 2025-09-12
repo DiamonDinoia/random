@@ -172,7 +172,7 @@ public:
     result_type s3 = 0;
     for (unsigned long i : LONG_JUMP)
       for (int b = 0; b < 64; b++) {
-        if (i & UINT64_C(1) << b) {
+        if (i & result_type{1} << b) {
           s0 ^= m_state[0];
           s1 ^= m_state[1];
           s2 ^= m_state[2];
@@ -209,13 +209,13 @@ private:
    * @return The next state.
    */
   PRNG_ALWAYS_INLINE constexpr result_type next() noexcept {
-    const auto t_shift = m_state[1] << 17;
     const auto result = rotl(m_state[0] + m_state[3], 23) + m_state[0];
+    const auto t_shift = m_state[1] << 17;
 
     m_state[2] ^= m_state[0];
     m_state[3] ^= m_state[1];
-    m_state[0] ^= m_state[3];
     m_state[1] ^= m_state[2];
+    m_state[0] ^= m_state[3];
 
     m_state[2] ^= t_shift;
     m_state[3] = rotl(m_state[3], 45);

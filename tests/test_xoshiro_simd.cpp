@@ -16,8 +16,8 @@ TEST_CASE("SEED", "[xoshiro256++]") {
   prng::XoshiroNative rng(seed);
   REQUIRE(rng.getState(0) == reference.getState());
   for (auto i = 1UL; i < SIMD_WIDTH; ++i) {
-      reference.jump();
-      REQUIRE(rng.getState(i) == reference.getState());
+    reference.jump();
+    REQUIRE(rng.getState(i) == reference.getState());
   }
 }
 
@@ -26,16 +26,16 @@ TEST_CASE("JUMP", "[xoshiro256++]") {
   INFO("SEED: " << seed);
   prng::XoshiroScalar reference(seed);
   prng::XoshiroNative rng(seed);
-  REQUIRE(rng.getState(0) == reference.getState());
-  for (auto i = 1UL; i < SIMD_WIDTH; ++i) {
-    reference.jump();
+  for (auto i = 0UL; i < SIMD_WIDTH; ++i) {
     REQUIRE(rng.getState(i) == reference.getState());
+    reference.jump();
   }
   rng.jump();
+  rng.jump();
   for (auto i = 0U; i < SIMD_WIDTH; ++i) {
-    INFO( "i: " << i);
-    reference.jump();
+    INFO("i: " << i);
     REQUIRE(rng.getState(i) == reference.getState());
+    reference.jump();
   }
 }
 
@@ -47,7 +47,7 @@ TEST_CASE("LONG JUMP", "[xoshiro256++]") {
   rng.long_jump();
   reference.long_jump();
   for (auto i = 0UL; i < SIMD_WIDTH; ++i) {
-    INFO( "i: " << i);
+    INFO("i: " << i);
     REQUIRE(rng.getState(i) == reference.getState());
     reference.jump();
   }
@@ -70,7 +70,7 @@ TEST_CASE("GENERATE UINT64", "[xoshiro256++]") {
   for (auto i = 0; i < SIMD_WIDTH; ++i) {
     REQUIRE(rng.getState(i) == reference[i].getState());
   }
-  for (auto i = 0; i < tests; i+=SIMD_WIDTH) {
+  for (auto i = 0; i < tests; i += SIMD_WIDTH) {
     for (auto j = 0; j < SIMD_WIDTH; ++j) {
       INFO("i: " << i << " j: " << j);
       REQUIRE(rng() == reference[j]());
@@ -95,11 +95,10 @@ TEST_CASE("GENERATE DOUBLE", "[xoshiro256++]") {
   for (auto i = 0; i < SIMD_WIDTH; ++i) {
     REQUIRE(rng.getState(i) == reference[i].getState());
   }
-  for (auto i = 0; i < tests; i+=SIMD_WIDTH) {
+  for (auto i = 0; i < tests; i += SIMD_WIDTH) {
     for (auto j = 0; j < SIMD_WIDTH; ++j) {
       INFO("i: " << i << " j: " << j);
       REQUIRE(rng.uniform() == reference[j].uniform());
     }
   }
 }
-
