@@ -52,3 +52,17 @@ target_link_options(benchmarks PRIVATE ${LINK_OPTIONS})
 if (MARCH_NATIVE)
     target_compile_options(benchmarks PRIVATE -march=native)
 endif ()
+
+# Add a custom target to run the benchmarks
+add_custom_target(benchmark
+    COMMAND benchmarks
+    DEPENDS benchmarks
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+    COMMENT "Running benchmarks..."
+    VERBATIM
+)
+
+
+if (MARCH_NATIVE)
+    target_compile_options(benchmarks PRIVATE -march=native)
+endif ()
