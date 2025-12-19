@@ -3,23 +3,7 @@
 #include <random>
 #include <random/xoshiro_simd.hpp>
 
-namespace {
-uint64_t s[4];
-inline uint64_t rotl(const uint64_t x, int k) {
-  return (x << k) | (x >> (64 - k));
-}
-uint64_t reference_next() {
-  const uint64_t result = rotl(s[0] + s[3], 23) + s[0];
-  const uint64_t t = s[1] << 17;
-  s[2] ^= s[0];
-  s[3] ^= s[1];
-  s[1] ^= s[2];
-  s[0] ^= s[3];
-  s[2] ^= t;
-  s[3] = rotl(s[3], 45);
-  return result;
-}
-}
+#include "xoshiro256plusplus.c"
 
 static constexpr auto iterations = 1;
 int main() {
@@ -40,7 +24,7 @@ int main() {
   using ankerl::nanobench::doNotOptimizeAway;
   ankerl::nanobench::Bench().minEpochTime(20ms).batch(iterations)
   .run("Reference Xoshiro UINT64", [&] {
-     for (int i = 0; i < iterations; ++i) doNotOptimizeAway(reference_next());
+     for (int i = 0; i < iterations; ++i) doNotOptimizeAway(next());
   }).run("XoshiroSIMD UINT64", [&] {
      for (int i = 0; i < iterations; ++i) doNotOptimizeAway(rng());
   }).run("Scalar Xoshiro UINT64", [&] {
