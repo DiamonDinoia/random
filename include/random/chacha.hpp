@@ -10,12 +10,17 @@
 
 namespace prng {
 
-class ChaChaScalar {
+template<std::uint8_t R = 20>
+class ChaCha {
+
+protected:
+  static constexpr auto MATRIX_WORDCOUNT = std::uint8_t{16};
+  static constexpr auto KEY_WORDCOUNT = std::uint8_t{8};
+
 public:
   using input_word = std::uint64_t;
   using matrix_word = std::uint32_t;
-  using rounds_type = std::uint8_t;
-  using matrix_type = std::array<matrix_word, 16>;
+  using matrix_type = std::array<matrix_word, MATRIX_WORDCOUNT>;
 
   // NOTE: We could perahps instead opt to pass a whole state as a singular input argument
   // That'd also enable us to make this constexpr but I digress.
@@ -24,14 +29,12 @@ public:
    * @param key The key, assumes bytes are in little endian order.
    * @param counter Initial value of the counter.
    * @param nonce Initial value of the nonce.
-   * @param rounds Even number of rounds to perform. If odd, performs one additional round.
    */
-  PRNG_ALWAYS_INLINE explicit ChaChaScalar(
-    const std::array<matrix_word, 8> key,
+  PRNG_ALWAYS_INLINE explicit ChaCha(
+    const std::array<matrix_word, KEY_WORDCOUNT> key,
     const input_word counter,
-    const input_word nonce,
-    const rounds_type rounds = 20
-  ) noexcept : rounds(rounds) {
+    const input_word nonce
+  ) noexcept {
     // First four words (i.e. top-row) are always the same constants
     // They spell out "expand 2-byte k" in ASCII (little-endian)
     m_state[0] = 0x61707865;
@@ -63,7 +66,6 @@ public:
   PRNG_ALWAYS_INLINE constexpr matrix_type getState() const noexcept { return m_state; }
 
 private:
-  rounds_type rounds;
   matrix_type m_state;
 
   // NOTE: THis is almost identical to the rotl in xoshiro_scalar, safe for the nubmer
@@ -124,7 +126,7 @@ private:
     
     // Note that we perform both an odd and even round at the same time.
     // As a result the amount of rounds performed is always rounded up to an even number.
-    for (rounds_type i  = 0; i < rounds; i += 2) {
+    for (auto i = 0; i < R; i += 2) {
       // Odd round
       quarter_round(x, 0, 4, 8,12);
       quarter_round(x, 1, 5, 9,13);

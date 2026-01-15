@@ -32,7 +32,7 @@ set(TEST_INCLUDE_DIR ${CMAKE_CURRENT_BINARY_DIR}/include)
 file(MAKE_DIRECTORY ${TEST_INCLUDE_DIR})
 file(DOWNLOAD https://prng.di.unimi.it/splitmix64.c ${TEST_INCLUDE_DIR}/splitmix64.c)
 file(DOWNLOAD https://prng.di.unimi.it/xoshiro256plusplus.c ${TEST_INCLUDE_DIR}/xoshiro256plusplus.c)
-file(DOWNLOAD https://cr.yp.to/streamciphers/timings/estreambench/submissions/salsa20/chacha20/ref/chacha.c ${TEST_INCLUDE_DIR}/chacha.c)
+file(DOWNLOAD https://cr.yp.to/streamciphers/timings/estreambench/submissions/salsa20/chacha20/ref/chacha.c ${TEST_INCLUDE_DIR}/chacha20.c)
 file(DOWNLOAD https://cr.yp.to/streamciphers/timings/estreambench/submissions/salsa20/chacha20/ref/ecrypt-sync.h ${TEST_INCLUDE_DIR}/ecrypt-sync.h)
 file(DOWNLOAD https://cr.yp.to/snuffle/ecrypt-portable.h ${TEST_INCLUDE_DIR}/ecrypt-portable.h)
 file(DOWNLOAD https://cr.yp.to/snuffle/ecrypt-config.h ${TEST_INCLUDE_DIR}/ecrypt-config.h)
@@ -57,13 +57,20 @@ target_link_libraries(testXoshiroSIMD PRIVATE random Catch2::Catch2)
 target_include_directories(testXoshiroSIMD PRIVATE ${TEST_INCLUDE_DIR} xsimd::xsimd)
 catch_discover_tests(testXoshiroSIMD)
 
+# For ChaCha we compile the reference implementation as a C library that wraps
+# the reference implementation, then link the test against it. This circumvents
+# -fpermissive errors
+add_library(chacha20_ref_impl_wrapper STATIC ${TEST_INCLUDE_DIR}/chacha20.c chacha20_ref_impl_wrapper.c)
+set_target_properties(chacha20_ref_impl_wrapper PROPERTIES
+    LINKER_LANGUAGE C
+    INTERPROCEDURAL_OPTIMIZATION_RELEASE ON
+    INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO ON
+    INTERPROCEDURAL_OPTIMIZATION_MINSIZEREL ON
+)
+target_include_directories(chacha20_ref_impl_wrapper PRIVATE ${TEST_INCLUDE_DIR})
 add_executable(testChaCha test_chacha.cpp)
-target_link_libraries(testChaCha PRIVATE random Catch2::Catch2)
+target_link_libraries(testChaCha PRIVATE random chacha20_ref_impl_wrapper Catch2::Catch2)
 target_include_directories(testChaCha PRIVATE ${TEST_INCLUDE_DIR})
-# ChaCha20's reference implementation's constants are set like
-#       static const char sigma[16] = "expand 2-byte k"
-# Causes error without -fpermissive because it doesn't fit null terminator.
-target_compile_options(testChaCha PRIVATE -fpermissive -w)
 catch_discover_tests(testChaCha)
 
 add_executable(benchmarks benchmarks.cpp)

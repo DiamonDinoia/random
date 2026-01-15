@@ -1,4 +1,5 @@
 cmake-build-*/
+.cache/
 .idea
 build/
 pyrandom/__pycache__/
