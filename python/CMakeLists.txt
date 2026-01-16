@@ -25,7 +25,7 @@ find_package(Python
         REQUIRED COMPONENTS Interpreter Development.Module NumPy
         OPTIONAL_COMPONENTS Development.SABIModule)
 
-set(NANOBIND_VERSION 2.9.2)
+set(NANOBIND_VERSION 2.10.2)
 
 CPMAddPackage(
     NAME nanobind

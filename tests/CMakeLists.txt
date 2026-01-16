@@ -1,7 +1,7 @@
 CPMAddPackage(
-        NAME catch2
+        NAME Catch2
         GITHUB_REPOSITORY catchorg/Catch2
-        VERSION 2.13.7
+        VERSION 3.12.0
         GIT_SHALLOW YES
         GIT_PROGRESS YES
         EXCLUDE_FROM_ALL YES
@@ -17,8 +17,10 @@ CPMAddPackage(
         EXCLUDE_FROM_ALL YES
         SYSTEM
 )
-list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/contrib)
+list(APPEND CMAKE_MODULE_PATH ${Catch2_SOURCE_DIR}/contrib)
 set(TEST_INCLUDE_DIR ${CMAKE_CURRENT_BINARY_DIR}/include)
+
+enable_language(C)
 
 # Download reference implementations here. The ChaCha reference implementation
 # requires multiple files because it transitively includes macros from them
@@ -32,46 +34,51 @@ set(TEST_INCLUDE_DIR ${CMAKE_CURRENT_BINARY_DIR}/include)
 file(MAKE_DIRECTORY ${TEST_INCLUDE_DIR})
 file(DOWNLOAD https://prng.di.unimi.it/splitmix64.c ${TEST_INCLUDE_DIR}/splitmix64.c)
 file(DOWNLOAD https://prng.di.unimi.it/xoshiro256plusplus.c ${TEST_INCLUDE_DIR}/xoshiro256plusplus.c)
-file(DOWNLOAD https://cr.yp.to/streamciphers/timings/estreambench/submissions/salsa20/chacha20/ref/chacha.c ${TEST_INCLUDE_DIR}/chacha20.c)
-file(DOWNLOAD https://cr.yp.to/streamciphers/timings/estreambench/submissions/salsa20/chacha20/ref/ecrypt-sync.h ${TEST_INCLUDE_DIR}/ecrypt-sync.h)
-file(DOWNLOAD https://cr.yp.to/snuffle/ecrypt-portable.h ${TEST_INCLUDE_DIR}/ecrypt-portable.h)
-file(DOWNLOAD https://cr.yp.to/snuffle/ecrypt-config.h ${TEST_INCLUDE_DIR}/ecrypt-config.h)
-file(DOWNLOAD https://cr.yp.to/snuffle/ecrypt-machine.h ${TEST_INCLUDE_DIR}/ecrypt-machine.h)
 
-include(Catch)
+# Use Monocypher for ChaCha20 (fetched via CPM)
+CPMAddPackage(
+    NAME monocypher
+    GITHUB_REPOSITORY LoupVaillant/Monocypher
+    GIT_TAG master
+    GIT_SHALLOW YES
+    GIT_PROGRESS YES
+    EXCLUDE_FROM_ALL YES
+)
+if (NOT TARGET monocypher)
+    add_library(monocypher STATIC ${monocypher_SOURCE_DIR}/src/monocypher.c)
+    target_include_directories(monocypher PUBLIC ${monocypher_SOURCE_DIR}/src)
+    set_target_properties(monocypher PROPERTIES POSITION_INDEPENDENT_CODE ON)
+endif()
+
 include(CTest)
 enable_testing()
 
 add_executable(testSplitMix splitmix_tests.cpp)
-target_link_libraries(testSplitMix PRIVATE random Catch2::Catch2)
+target_link_libraries(testSplitMix PRIVATE random Catch2::Catch2WithMain)
 target_include_directories(testSplitMix PRIVATE ${TEST_INCLUDE_DIR})
-catch_discover_tests(testSplitMix)
+add_test(NAME testSplitMix COMMAND testSplitMix)
 
 add_executable(testXoshiro test_xoshiro.cpp)
-target_link_libraries(testXoshiro PRIVATE random Catch2::Catch2)
+target_link_libraries(testXoshiro PRIVATE random Catch2::Catch2WithMain)
 target_include_directories(testXoshiro PRIVATE ${TEST_INCLUDE_DIR})
-catch_discover_tests(testXoshiro)
+add_test(NAME testXoshiro COMMAND testXoshiro)
 
 add_executable(testXoshiroSIMD test_xoshiro_simd.cpp)
-target_link_libraries(testXoshiroSIMD PRIVATE random Catch2::Catch2)
+target_link_libraries(testXoshiroSIMD PRIVATE random Catch2::Catch2WithMain)
 target_include_directories(testXoshiroSIMD PRIVATE ${TEST_INCLUDE_DIR} xsimd::xsimd)
-catch_discover_tests(testXoshiroSIMD)
+add_test(NAME testXoshiroSIMD COMMAND testXoshiroSIMD)
 
-# For ChaCha we compile the reference implementation as a C library that wraps
-# the reference implementation, then link the test against it. This circumvents
-# -fpermissive errors
-add_library(chacha20_ref_impl_wrapper STATIC ${TEST_INCLUDE_DIR}/chacha20.c chacha20_ref_impl_wrapper.c)
-set_target_properties(chacha20_ref_impl_wrapper PROPERTIES
-    LINKER_LANGUAGE C
-    INTERPROCEDURAL_OPTIMIZATION_RELEASE ON
-    INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO ON
-    INTERPROCEDURAL_OPTIMIZATION_MINSIZEREL ON
-)
-target_include_directories(chacha20_ref_impl_wrapper PRIVATE ${TEST_INCLUDE_DIR})
+# Use Monocypher for ChaCha20 and link it into the chacha test.
+# monocypher is fetched above via CPM; create a target if the package didn't.
+if (NOT TARGET monocypher)
+    add_library(monocypher STATIC ${monocypher_SOURCE_DIR}/src/monocypher.c)
+    target_include_directories(monocypher PUBLIC ${monocypher_SOURCE_DIR}/src)
+    set_target_properties(monocypher PROPERTIES POSITION_INDEPENDENT_CODE ON)
+endif()
+
 add_executable(testChaCha test_chacha.cpp)
-target_link_libraries(testChaCha PRIVATE random chacha20_ref_impl_wrapper Catch2::Catch2)
-target_include_directories(testChaCha PRIVATE ${TEST_INCLUDE_DIR})
-catch_discover_tests(testChaCha)
+target_link_libraries(testChaCha PRIVATE random monocypher Catch2::Catch2WithMain)
+add_test(NAME testChaCha COMMAND testChaCha)
 
 add_executable(benchmarks benchmarks.cpp)
 target_link_libraries(benchmarks PRIVATE random nanobench)

@@ -2,9 +2,7 @@
 #include <vector>
 
 #include <random/xoshiro_simd.hpp>
-#define CATCH_CONFIG_MAIN
-#define CATCH_CONFIG_ENABLE_BENCHMARKING
-#include <catch2/catch.hpp>
+#include <catch2/catch_all.hpp>
 
 static constexpr auto tests = 1 << 12; // 4096
 constexpr auto SIMD_WIDTH = xsimd::simd_type<prng::XoshiroNative::result_type>::size;

@@ -1,7 +1,6 @@
 #include <cstdint>
 #include <random>
-#define CATCH_CONFIG_MAIN
-#include <catch2/catch.hpp>
+#include <catch2/catch_all.hpp>
 #include <random/splitmix.hpp>
 
 #include "splitmix64.c"
@@ -16,4 +15,3 @@ TEST_CASE("splitmix", "[splitmix]") {
         REQUIRE(splitmix() == next());
     }
 }
-

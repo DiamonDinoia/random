@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(random VERSION 0.1 LANGUAGES CXX C)
+project(random VERSION 0.1 LANGUAGES CXX)
 
 # if no build type was specified, default to Release
 if (NOT CMAKE_BUILD_TYPE)
@@ -8,8 +8,8 @@ if (NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build." FORCE)
 endif ()
 
-set(CPM_DOWNLOAD_VERSION 0.40.6)
-set(XSIMD_DOWNLOAD_VERSION feat/faster-shift-rotation)
+set(CPM_DOWNLOAD_VERSION 0.42.0)
+set(XSIMD_DOWNLOAD_VERSION 14.0.0)
 
 option(ENABLE_TESTS "Enable tests" ON)
 option(ENABLE_PYTHON "Enable Python bindings" ON)
@@ -33,7 +33,7 @@ include(${CPM_DOWNLOAD_LOCATION})
 
 CPMAddPackage(
         NAME xsimd
-        GITHUB_REPOSITORY DiamonDinoia/xsimd
+        GITHUB_REPOSITORY xtensor-stack/xsimd
         GIT_TAG ${XSIMD_DOWNLOAD_VERSION}
         GIT_SHALLOW YES
         GIT_PROGRESS YES
