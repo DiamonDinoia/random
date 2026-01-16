@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(random VERSION 0.1 LANGUAGES CXX)
+project(random VERSION 0.1 LANGUAGES CXX C)
 
 # if no build type was specified, default to Release
 if (NOT CMAKE_BUILD_TYPE)

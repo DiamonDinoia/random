@@ -1,6 +1,11 @@
 cmake-build-*/
+.cache/
 .idea
 build/
 pyrandom/__pycache__/
 fix.patch
 __pycache__/
+
+.direnv/
+.envrc
+shell.nix
