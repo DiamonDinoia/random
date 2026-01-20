@@ -1,12 +1,22 @@
 #include <nanobind/nanobind.h>
+#include <nanobind/ndarray.h>
 #include <numpy/random/bitgen.h>
 #include <type_traits>  // std::void_t, std::true_type, std::false_type
 #include <utility>      // std::forward
+#include <stdexcept>
+#include <memory>
+#include <cstring>
+#include <vector>
 
 #include "random/macros.hpp"
 #include "random/splitmix.hpp"
 #include "random/xoshiro.hpp"
 #include "random/xoshiro_simd.hpp"
+
+namespace {
+// Scaling constant: use 53-bit mantissa mapping to [0,1)
+constexpr double kInvPow53 = 0x1.0p-53;
+}
 
 namespace nb = nanobind;
 using namespace prng;
@@ -40,27 +50,108 @@ private:
   XoshiroNative rng;
 };
 
-class PyXoshiroSIMD {
+class PyXoshiroSIMD : public XoshiroSIMD {
 public:
-  PRNG_ALWAYS_INLINE explicit PyXoshiroSIMD(uint64_t seed) noexcept : rng(seed) {}
-  PRNG_ALWAYS_INLINE PyXoshiroSIMD(uint64_t seed, uint64_t thread) noexcept : rng(seed, thread) {}
-  PRNG_ALWAYS_INLINE PyXoshiroSIMD(uint64_t seed, uint64_t thread, uint64_t cluster) noexcept
-      : rng(seed, thread, cluster) {}
+  using XoshiroSIMD::XoshiroSIMD;
 
-  PRNG_ALWAYS_INLINE uint64_t random_raw() noexcept { return rng(); }
-  PRNG_ALWAYS_INLINE double uniform() noexcept { return rng.uniform(); }
-  PRNG_ALWAYS_INLINE void jump() noexcept { rng.jump(); }
-  PRNG_ALWAYS_INLINE void long_jump() noexcept { rng.long_jump(); }
+  PRNG_ALWAYS_INLINE uint64_t random_raw() noexcept { return (*this)(); }
+  PRNG_ALWAYS_INLINE double uniform() noexcept { return XoshiroSIMD::uniform(); }
+  PRNG_ALWAYS_INLINE void jump() noexcept { XoshiroSIMD::jump(); }
+  PRNG_ALWAYS_INLINE void long_jump() noexcept { XoshiroSIMD::long_jump(); }
 
-private:
-  XoshiroSIMD rng;
+  // Fast bulk fill using internal cache; accepts 1D C-contiguous
+  PRNG_ALWAYS_INLINE void fill_uniform_array(nb::ndarray<nb::numpy, double, nb::ndim<1>, nb::c_contig> arr) noexcept {
+    nb::gil_scoped_release release;
+    auto* out = arr.data();
+    const std::size_t n = arr.size();
+    std::size_t produced = 0;
+    while (produced < n) {
+      if (m_index == 0) [[unlikely]] {
+        pImpl->populate_cache();
+      }
+      const std::size_t available = static_cast<std::size_t>(CACHE_SIZE) - m_index;
+      const std::size_t to_copy = (n - produced < available) ? (n - produced) : available;
+      for (std::size_t i = 0; i < to_copy; ++i) {
+        out[produced + i] = static_cast<double>(m_cache[m_index + i] >> 11) * kInvPow53;
+      }
+      m_index = static_cast<std::uint8_t>(m_index + to_copy);
+      if (m_index == CACHE_SIZE) {
+        m_index = 0;
+      }
+      produced += to_copy;
+    }
+  }
+
+  // Overload: accept 1D F-contiguous
+  PRNG_ALWAYS_INLINE void fill_uniform_array(nb::ndarray<nb::numpy, double, nb::ndim<1>, nb::f_contig> arr) noexcept {
+    nb::gil_scoped_release release;
+    auto* out = arr.data();
+    const std::size_t n = arr.size();
+    std::size_t produced = 0;
+    while (produced < n) {
+      if (m_index == 0) [[unlikely]] {
+        pImpl->populate_cache();
+      }
+      const std::size_t available = static_cast<std::size_t>(CACHE_SIZE) - m_index;
+      const std::size_t to_copy = (n - produced < available) ? (n - produced) : available;
+      for (std::size_t i = 0; i < to_copy; ++i) {
+        out[produced + i] = static_cast<double>(m_cache[m_index + i] >> 11) * kInvPow53;
+      }
+      m_index = static_cast<std::uint8_t>(m_index + to_copy);
+      if (m_index == CACHE_SIZE) {
+        m_index = 0;
+      }
+      produced += to_copy;
+    }
+  }
+
+  PRNG_ALWAYS_INLINE void fill_uint64_array(
+      nb::ndarray<nb::numpy, std::uint64_t, nb::ndim<1>, nb::c_contig> arr) noexcept {
+    nb::gil_scoped_release release;
+    auto* out = arr.data();
+    const std::size_t n = arr.size();
+    std::size_t produced = 0;
+    while (produced < n) {
+      if (m_index == 0) [[unlikely]] {
+        pImpl->populate_cache();
+      }
+      const std::size_t available = static_cast<std::size_t>(CACHE_SIZE) - m_index;
+      const std::size_t to_copy = (n - produced < available) ? (n - produced) : available;
+      // Copy contiguous block directly
+      std::memcpy(out + produced, m_cache.data() + m_index, to_copy * sizeof(std::uint64_t));
+      m_index = static_cast<std::uint8_t>(m_index + to_copy);
+      if (m_index == CACHE_SIZE) {
+        m_index = 0;
+      }
+      produced += to_copy;
+    }
+  }
+
+  // Overload: accept 1D F-contiguous for uint64
+  PRNG_ALWAYS_INLINE void fill_uint64_array(
+      nb::ndarray<nb::numpy, std::uint64_t, nb::ndim<1>, nb::f_contig> arr) noexcept {
+    nb::gil_scoped_release release;
+    auto* out = arr.data();
+    const std::size_t n = arr.size();
+    std::size_t produced = 0;
+    while (produced < n) {
+      if (m_index == 0) [[unlikely]] {
+        pImpl->populate_cache();
+      }
+      const std::size_t available = static_cast<std::size_t>(CACHE_SIZE) - m_index;
+      const std::size_t to_copy = (n - produced < available) ? (n - produced) : available;
+      std::memcpy(out + produced, m_cache.data() + m_index, to_copy * sizeof(std::uint64_t));
+      m_index = static_cast<std::uint8_t>(m_index + to_copy);
+      if (m_index == CACHE_SIZE) {
+        m_index = 0;
+      }
+      produced += to_copy;
+    }
+  }
 };
 
 // -----------------------------------------------------------------------------
-// Traits: detect presence of rng.uniform()
-template <typename T, typename = void> struct has_uniform : std::false_type {};
-template <typename T>
-struct has_uniform<T, std::void_t<decltype(std::declval<T&>().uniform())>> : std::true_type {};
+ 
 
 // -----------------------------------------------------------------------------
 // DirectBitGen: optimized adapter
@@ -68,15 +159,26 @@ template <typename Rng>
 struct alignas(64) DirectBitGen {
   Rng      rng;
   bitgen_t base;
+  // Local cache of doubles to amortize callback overhead in NumPy's per-sample loop.
+  static constexpr std::size_t DCACHE = 8192;
+  std::vector<double> dcache;
+  std::size_t dpos;
 
   template <typename... Args>
   PRNG_ALWAYS_INLINE explicit DirectBitGen(Args&&... args) noexcept
-  : rng(std::forward<Args>(args)...), base{} {
+  : rng(std::forward<Args>(args)...), base{}, dcache(DCACHE), dpos{DCACHE} {
     base.state       = this;
     base.next_uint64 = &DirectBitGen::next_u64;
     base.next_uint32 = &DirectBitGen::next_u32;
     base.next_double = &DirectBitGen::next_f64;
     base.next_raw    = base.next_uint64;
+  }
+
+  PRNG_ALWAYS_INLINE void refill() noexcept {
+    for (std::size_t i = 0; i < DCACHE; ++i) {
+      dcache[i] = static_cast<double>(rng() >> 11) * kInvPow53;
+    }
+    dpos = 0;
   }
 
   // Static callbacks — no capturing lambdas, no thunks
@@ -93,12 +195,10 @@ struct alignas(64) DirectBitGen {
 
   PRNG_ALWAYS_INLINE static double next_f64(void* s) noexcept {
     auto* self = static_cast<DirectBitGen*>(s);
-    if constexpr (has_uniform<Rng>::value) {
-      return self->rng.uniform();
-    } else {
-      // 53-bit mantissa from upper bits
-      return static_cast<double>(self->rng() >> 11) * 0x1.0p-53;
+    if (self->dpos == DCACHE) [[unlikely]] {
+      self->refill();
     }
+    return self->dcache[self->dpos++];
   }
 };
 
@@ -155,6 +255,26 @@ PRNG_ALWAYS_INLINE nb::object make_xoshiro_native_bitgenerator(uint64_t seed, ui
   return make_direct_bitgenerator<XoshiroNative>(seed, thread, cluster);
 }
 
+PRNG_ALWAYS_INLINE void fill_xoshiro_simd_array(uint64_t seed, nb::ndarray<nb::numpy, double, nb::ndim<1>, nb::c_contig> arr) {
+  nb::gil_scoped_release release;
+  auto* out = arr.data();
+  const std::size_t n = arr.size();
+  prng::XoshiroSIMD rng(seed);
+  for (std::size_t i = 0; i < n; ++i) {
+    out[i] = static_cast<double>(rng() >> 11) * kInvPow53;
+  }
+}
+
+PRNG_ALWAYS_INLINE void fill_xoshiro_simd_uint64(uint64_t seed, nb::ndarray<nb::numpy, std::uint64_t, nb::ndim<1>, nb::c_contig> arr) {
+  nb::gil_scoped_release release;
+  auto* out = arr.data();
+  const std::size_t n = arr.size();
+  prng::XoshiroSIMD rng(seed);
+  for (std::size_t i = 0; i < n; ++i) {
+    out[i] = rng();
+  }
+}
+
 // -----------------------------------------------------------------------------
 // Python module
 NB_MODULE(pyrandom_ext, m) {
@@ -180,7 +300,12 @@ NB_MODULE(pyrandom_ext, m) {
       .def("random_raw", &PyXoshiroSIMD::random_raw)
       .def("uniform", &PyXoshiroSIMD::uniform)
       .def("jump", &PyXoshiroSIMD::jump)
-      .def("long_jump", &PyXoshiroSIMD::long_jump);
+      .def("long_jump", &PyXoshiroSIMD::long_jump)
+      // Private helpers for internal fast paths in the high-level wrapper
+      .def("_fill_uniform", nb::overload_cast<nb::ndarray<nb::numpy, double, nb::ndim<1>, nb::c_contig>>(&PyXoshiroSIMD::fill_uniform_array), nb::arg("out"))
+      .def("_fill_uniform", nb::overload_cast<nb::ndarray<nb::numpy, double, nb::ndim<1>, nb::f_contig>>(&PyXoshiroSIMD::fill_uniform_array), nb::arg("out"))
+      .def("_fill_uint64", nb::overload_cast<nb::ndarray<nb::numpy, std::uint64_t, nb::ndim<1>, nb::c_contig>>(&PyXoshiroSIMD::fill_uint64_array), nb::arg("out"))
+      .def("_fill_uint64", nb::overload_cast<nb::ndarray<nb::numpy, std::uint64_t, nb::ndim<1>, nb::f_contig>>(&PyXoshiroSIMD::fill_uint64_array), nb::arg("out"));
 
   // NumPy BitGenerator factories
   m.def("create_bit_generator", &make_xoshiro_simd_bitgenerator, nb::arg("seed"),
@@ -206,4 +331,11 @@ NB_MODULE(pyrandom_ext, m) {
         nb::overload_cast<uint64_t, uint64_t, uint64_t>(&make_xoshiro_native_bitgenerator),
         nb::arg("seed"), nb::arg("thread"), nb::arg("cluster"),
         "Return a NumPy BitGenerator backed by XoshiroNative (seed, thread, cluster)");
+
+  m.def("fill_xoshiro_simd_array", &fill_xoshiro_simd_array, nb::arg("seed"), nb::arg("out"),
+        "Fill a 1D numpy.ndarray[float64, C-contiguous] using XoshiroSIMD core bulk-fill (releases GIL)");
+
+  m.def("fill_xoshiro_simd_uint64", &fill_xoshiro_simd_uint64, nb::arg("seed"), nb::arg("out"),
+        "Fill a 1D numpy.ndarray[uint64, C-contiguous] with raw XoshiroSIMD outputs (releases GIL)");
+
 }

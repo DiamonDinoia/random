@@ -37,4 +37,5 @@ nanobind_add_module(pyrandom_ext NB_STATIC STABLE_ABI FREE_THREADED LTO NOMINSIZ
 target_link_libraries(pyrandom_ext PRIVATE random Python::NumPy)
 target_compile_options(pyrandom_ext PRIVATE ${COMPILE_OPTIONS})
 target_link_options(pyrandom_ext PRIVATE ${LINK_OPTIONS})
+target_compile_features(pyrandom_ext PRIVATE cxx_std_${SUPPORTED_CXX_STANDARD})
 install(TARGETS pyrandom_ext LIBRARY DESTINATION .)

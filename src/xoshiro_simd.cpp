@@ -17,4 +17,6 @@ create_xoshiro_simd_impl(XoshiroSIMD::result_type seed, XoshiroSIMD::result_type
 // Definitions of XoshiroSIMD's member functions.
 XoshiroSIMD::XoshiroSIMD(const result_type seed, const result_type thread_id, const result_type cluster_id) noexcept
     : m_cache{}, pImpl{create_xoshiro_simd_impl(seed, thread_id, cluster_id, m_cache)}, m_index{0} {}
+
+// fill_uniform / fill_uint64 have been moved to the Python extension.
 } // namespace prng

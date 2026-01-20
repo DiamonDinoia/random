@@ -9,3 +9,5 @@ __pycache__/
 .direnv/
 .envrc
 shell.nix
+
+cmake-build*/

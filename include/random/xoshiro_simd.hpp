@@ -131,7 +131,10 @@ public:
    *
    * @return A uniform random number.
    */
-  PRNG_ALWAYS_INLINE constexpr auto uniform() noexcept { return static_cast<double>(operator()() >> 11) * 0x1.0p-53; }
+  PRNG_ALWAYS_INLINE constexpr auto uniform() noexcept {
+    // 53-bit path: use the high 53 bits for IEEE-754 double mantissa
+    return static_cast<double>(operator()() >> 11) * 0x1.0p-53;
+  }
 
   /**
    * Returns the state of the generator at the specified index.
@@ -334,7 +337,13 @@ public:
    *
    * @return A uniform random number.
    */
-  PRNG_ALWAYS_INLINE double uniform() noexcept { return static_cast<double>(operator()() >> 11) * 0x1.0p-53; }
+  PRNG_ALWAYS_INLINE double uniform() noexcept {
+    // 53-bit path: use the high 53 bits for IEEE-754 double mantissa
+    return static_cast<double>(operator()() >> 11) * 0x1.0p-53;
+  }
+
+  // Bulk fill helpers are implemented in the Python extension to reduce
+  // surface area of the core C++ API. Use per-sample operator()/uniform().
 
   /**
    * Jump function for the generator.
@@ -346,7 +355,7 @@ public:
    */
   PRNG_ALWAYS_INLINE void long_jump() noexcept { pImpl->long_jump(); }
 
-private:
+protected:
   static constexpr auto CACHE_SIZE = internal::XoshiroSIMDImpl<xsimd::default_arch>::CACHE_SIZE;
 
   /**
