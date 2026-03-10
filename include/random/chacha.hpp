@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstdint> 
 
 #include "macros.hpp"
@@ -22,11 +23,11 @@ public:
   using matrix_word = std::uint32_t;
   using matrix_type = std::array<matrix_word, MATRIX_WORDCOUNT>;
 
-  // NOTE: We could perahps instead opt to pass a whole state as a singular input argument
+  // NOTE: We could perhaps instead opt to pass a whole state as a singular input argument
   // That'd also enable us to make this constexpr but I digress.
   /**
    * @brief Construct the ChaChaScalar generator with given key, counter and nonce
-   * @param key The key, assumes bytes are in little endian order.
+   * @param key A 256-bit key, divided up into eight 32-bit words.
    * @param counter Initial value of the counter.
    * @param nonce Initial value of the nonce.
    */
@@ -42,7 +43,7 @@ public:
     m_state[2] = 0x79622d32;
     m_state[3] = 0x6b206574;
 
-    for (int i = 0; i < 8; ++i) {
+    for (auto i = 0; i < 8; ++i) {
       m_state[4 + i] = key[i];
     }
 
@@ -140,7 +141,7 @@ private:
       quarter_round(x, 3, 4, 9,14);
     }
 
-    for (int i = 0; i < 16; ++i) {
+    for (auto i = 0; i < MATRIX_WORDCOUNT; ++i) {
       x[i] += m_state[i];
     }
 

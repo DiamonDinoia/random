@@ -80,6 +80,11 @@ add_executable(testChaCha test_chacha.cpp)
 target_link_libraries(testChaCha PRIVATE random monocypher Catch2::Catch2WithMain)
 add_test(NAME testChaCha COMMAND testChaCha)
 
+add_executable(testChaChaSIMD test_chacha_simd.cpp)
+target_link_libraries(testChaChaSIMD PRIVATE random Catch2::Catch2WithMain)
+target_include_directories(testChaChaSIMD PRIVATE ${TEST_INCLUDE_DIR} xsimd::xsimd)
+add_test(NAME testChaChaSIMD COMMAND testChaChaSIMD)
+
 add_executable(benchmarks benchmarks.cpp)
 target_link_libraries(benchmarks PRIVATE random nanobench)
 target_include_directories(benchmarks PRIVATE ${TEST_INCLUDE_DIR} xsimd::xsimd)
