@@ -23,10 +23,8 @@ public:
   using matrix_word = std::uint32_t;
   using matrix_type = std::array<matrix_word, MATRIX_WORDCOUNT>;
 
-  // NOTE: We could perhaps instead opt to pass a whole state as a singular input argument
-  // That'd also enable us to make this constexpr but I digress.
   /**
-   * @brief Construct the ChaChaScalar generator with given key, counter and nonce
+   * @brief Construct a scalar ChaCha generator with given key, counter and nonce
    * @param key A 256-bit key, divided up into eight 32-bit words.
    * @param counter Initial value of the counter.
    * @param nonce Initial value of the nonce.
