@@ -23,6 +23,7 @@ TEST_CASE("SEED", "[chacha]") {
   ChaCha20Reference chaCha20Reference(key, counter, nonce);
   ChaCha20SIMD chaCha20SIMD(key, counter, nonce);
   for (auto i = 0; i < seed_tests; ++i) {
+    REQUIRE(chaCha20SIMD.getState() == chaCha20Reference.getState());
     REQUIRE(chaCha20SIMD() == chaCha20Reference());
   }
 }
@@ -43,10 +44,14 @@ TEST_CASE("COUNTER OVERFLOW", "[chacha]") {
 
   for (auto i = 0; i < overflow_tests; ++i) {
     // This next line generates a random counter value that will always result in an overflow
-    // of at least one batched block upon the next invocation of the chacha20 simd implementation. 
+    // of at least one batched block upon the next invocation of the chacha20 simd implementation.
     ChaCha20SIMD::input_word counter = (static_cast<uint64_t>(rng32()) << 32) | (0xFFFFFFFF - rngOverflow(rng32));
     ChaCha20Reference chaCha20Reference(key, counter, nonce);
     ChaCha20SIMD chaCha20SIMD(key, counter, nonce);
-    REQUIRE(chaCha20SIMD() == chaCha20Reference());
+    for (std::size_t lane = 0; lane < ChaCha20SIMD::simd_type::size; ++lane) {
+      INFO("lane: " << lane);
+      REQUIRE(chaCha20SIMD.getState() == chaCha20Reference.getState());
+      REQUIRE(chaCha20SIMD() == chaCha20Reference());
+    }
   }
 }

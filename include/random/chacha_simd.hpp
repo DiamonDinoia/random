@@ -1,14 +1,17 @@
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
-#include <iostream>
 #include <limits>
+#include <utility>
 #include <xsimd/xsimd.hpp>
 
 #include "random/macros.hpp"
+#include "xsimd/types/xsimd_api.hpp"
 
 namespace prng {
+
 template <std::uint8_t R, class Arch>
 class ChaChaSIMD {
 protected:
@@ -16,7 +19,6 @@ protected:
   static constexpr auto MATRIX_COL_LEN = std::uint8_t{4};
   static constexpr auto MATRIX_WORDCOUNT = std::uint8_t{16};
   static constexpr auto KEY_WORDCOUNT = std::uint8_t{8};
-  static constexpr auto KEY_HALF_WORDCOUNT = std::uint8_t{4};
 
 public:
   using input_word = std::uint64_t;
@@ -27,17 +29,21 @@ public:
 
 protected:
   static constexpr std::uint8_t SIMD_WIDTH = std::uint8_t{simd_type::size};
-  static constexpr auto CACHE_SIZE = std::uint8_t{SIMD_WIDTH};
+  static constexpr auto CACHE_WORDCOUNT = std::uint16_t{MATRIX_WORDCOUNT * SIMD_WIDTH};
+  static constexpr auto CACHE_BLOCKCOUNT = SIMD_WIDTH;
 
 public:
+  /**
+   * @brief Construct a SIMD ChaCha generator with given key, counter and nonce
+   * @param key A 256-bit key, divided up into eight 32-bit words.
+   * @param counter Initial value of the counter.
+   * @param nonce Initial value of the nonce.
+   */
   explicit PRNG_ALWAYS_INLINE ChaChaSIMD(
     const std::array<matrix_word, KEY_WORDCOUNT> key,
     const input_word counter,
     const input_word nonce
   ) {
-    // TODO: Maybe consider making this constructor shared between both scalar
-    // and simd impl as it is the same between both
-
     // First four words (i.e. top-row) are always the same constants
     // They spell out "expand 2-byte k" in ASCII (little-endian)
     m_state[0] = 0x61707865;
@@ -56,40 +62,78 @@ public:
     m_state[15] = static_cast<matrix_word>(nonce >> 32);
   }
 
+  /**
+   * @brief Generates the next random block.
+   * @return The next random block.
+   */
   PRNG_ALWAYS_INLINE constexpr matrix_type operator()() noexcept {
-    if (m_index >= CACHE_SIZE) [[unlikely]] {
+    if (m_index >= CACHE_BLOCKCOUNT) [[unlikely]] {
       gen_next_blocks_in_cache();
       m_index = 0;
     }
-    return m_cache[m_index++];
+    matrix_word *cache_block = m_cache.data() + (m_index++ * MATRIX_WORDCOUNT);
+    matrix_type block;
+    std::copy(cache_block, cache_block + MATRIX_WORDCOUNT, block.begin());
+    return block;
+  }
+
+  /**
+   * @brief Returns the state of the generator; a 4x4 matrix.
+   * @return State of the generator.
+   */
+  PRNG_ALWAYS_INLINE constexpr matrix_type getState() const noexcept {
+    matrix_type state = m_state;
+    if (m_index < CACHE_BLOCKCOUNT) {
+      input_word counter = (static_cast<input_word>(state[13]) << 32) | static_cast<input_word>(state[12]);
+      counter -= static_cast<input_word>(CACHE_BLOCKCOUNT - m_index);
+      state[12] = static_cast<matrix_word>(counter & 0xFFFFFFFF);
+      state[13] = static_cast<matrix_word>(counter >> 32);
+    }
+    return state;
   }
 
 
 private:
   matrix_type m_state;
-  matrix_type m_cache[CACHE_SIZE];
+  std::array<matrix_word, CACHE_WORDCOUNT> m_cache;
   // Initalize to "past end of the cache" since cache starts empty
-  std::uint8_t m_index = CACHE_SIZE;
+  std::uint8_t m_index = CACHE_BLOCKCOUNT;
 
-  // Return an array that's like { 0, 1, ..., N - 1 }. Can be used to initalize a batch
-  // for consecutively incremeting a batch of low counter words.
+  /**
+   * Return an array { 0, 1 * step, ..., (n - 1) * step }. Can be used to initialize a batch for
+   * consecutively incremeting elements in a batch of low counter words, as well as
+   * a batch of offsets to scatter matrix words into memory with.
+  */
   template <size_t... Is>
-  static constexpr PRNG_ALWAYS_INLINE std::array<matrix_word, sizeof...(Is)> make_lower_counter_inc(std::index_sequence<Is...>) noexcept {
-    return {Is...};
+  static constexpr PRNG_ALWAYS_INLINE std::array<matrix_word, sizeof...(Is)> matrix_word_sequence(std::index_sequence<Is...>, std::uint8_t step = 1) noexcept {
+    return {static_cast<matrix_word>(Is * step)...};
   }
 
+  /**
+   * Return an array { 0, n < 1, n < 2, ..., n < (SIMD_WIDTH - 1) }. Can be used to initialize a
+   * batch for incremetinng elements in a batch of consecutive high counter words, depending on at
+   * what index the corresponding lower counter words had an overflow.
+   */
+  PRNG_ALWAYS_INLINE static constexpr std::array<matrix_word, SIMD_WIDTH> make_higher_counter_inc(std::uint8_t n) noexcept {
+    std::array<matrix_word, SIMD_WIDTH> incs;
+    incs[0] = 0;
+    for (auto i = 1; i < SIMD_WIDTH; ++i) {
+      incs[i] = n < i;
+    }
+    return incs;
+  }
+
+  /**
+   * Generates `SIMD_WIDTH` new ChaCha blocks, and write them all into the cache. Will overwrite
+   * anything else in the cache.
+   */
   PRNG_ALWAYS_INLINE constexpr void gen_next_blocks_in_cache() noexcept {
-    simd_type lower_counter_inc = 
-      xsimd::load_unaligned(make_lower_counter_inc(std::make_index_sequence<SIMD_WIDTH>{}).data());
-    simd_type higher_counter_inc;
-    matrix_word c = std::numeric_limits<matrix_word>::max() - m_state[12];
-    if (c < SIMD_WIDTH) [[unlikely]] {
-      matrix_word b[SIMD_WIDTH];
-      b[0] = 0;
-      for (auto i = 1; i < SIMD_WIDTH; ++i) {
-        b[i] = c < i;
-      }
-      higher_counter_inc = xsimd::load_unaligned(b);
+    alignas(simd_type::arch_type::alignment()) simd_type lower_counter_inc, higher_counter_inc;
+    lower_counter_inc =
+      xsimd::load_unaligned(matrix_word_sequence(std::make_index_sequence<SIMD_WIDTH>{}).data());
+    matrix_word overflow_index = std::numeric_limits<matrix_word>::max() - m_state[12];
+    if (overflow_index < SIMD_WIDTH) [[unlikely]] {
+      higher_counter_inc = xsimd::load_unaligned(make_higher_counter_inc(overflow_index).data());
     } else {
       higher_counter_inc = simd_type::broadcast(0);
     }
@@ -112,10 +156,10 @@ private:
       x[14] ^= x[2];
       x[15] ^= x[3];
 
-      x[12] = xsimd::rotl(x[12], 16);
-      x[13] = xsimd::rotl(x[13], 16);
-      x[14] = xsimd::rotl(x[14], 16);
-      x[15] = xsimd::rotl(x[15], 16);
+      x[12] = xsimd::rotl<16>(x[12]);
+      x[13] = xsimd::rotl<16>(x[13]);
+      x[14] = xsimd::rotl<16>(x[14]);
+      x[15] = xsimd::rotl<16>(x[15]);
 
       x[8] += x[12];
       x[9] += x[13];
@@ -127,10 +171,10 @@ private:
       x[6] ^= x[10];
       x[7] ^= x[11];
 
-      x[4] = xsimd::rotl(x[4], 12);
-      x[5] = xsimd::rotl(x[5], 12);
-      x[6] = xsimd::rotl(x[6], 12);
-      x[7] = xsimd::rotl(x[7], 12);
+      x[4] = xsimd::rotl<12>(x[4]);
+      x[5] = xsimd::rotl<12>(x[5]);
+      x[6] = xsimd::rotl<12>(x[6]);
+      x[7] = xsimd::rotl<12>(x[7]);
 
       x[0] += x[4];
       x[1] += x[5];
@@ -142,10 +186,10 @@ private:
       x[14] ^= x[2];
       x[15] ^= x[3];
 
-      x[12] = xsimd::rotl(x[12], 8);
-      x[13] = xsimd::rotl(x[13], 8);
-      x[14] = xsimd::rotl(x[14], 8);
-      x[15] = xsimd::rotl(x[15], 8);
+      x[12] = xsimd::rotl<8>(x[12]);
+      x[13] = xsimd::rotl<8>(x[13]);
+      x[14] = xsimd::rotl<8>(x[14]);
+      x[15] = xsimd::rotl<8>(x[15]);
 
       x[8] += x[12];
       x[9] += x[13];
@@ -157,10 +201,10 @@ private:
       x[6] ^= x[10];
       x[7] ^= x[11];
 
-      x[4] = xsimd::rotl(x[4], 7);
-      x[5] = xsimd::rotl(x[5], 7);
-      x[6] = xsimd::rotl(x[6], 7);
-      x[7] = xsimd::rotl(x[7], 7);
+      x[4] = xsimd::rotl<7>(x[4]);
+      x[5] = xsimd::rotl<7>(x[5]);
+      x[6] = xsimd::rotl<7>(x[6]);
+      x[7] = xsimd::rotl<7>(x[7]);
 
       x[0] += x[5];
       x[1] += x[6];
@@ -172,10 +216,10 @@ private:
       x[13] ^= x[2];
       x[14] ^= x[3];
 
-      x[15] = xsimd::rotl(x[15], 16);
-      x[12] = xsimd::rotl(x[12], 16);
-      x[13] = xsimd::rotl(x[13], 16);
-      x[14] = xsimd::rotl(x[14], 16);
+      x[15] = xsimd::rotl<16>(x[15]);
+      x[12] = xsimd::rotl<16>(x[12]);
+      x[13] = xsimd::rotl<16>(x[13]);
+      x[14] = xsimd::rotl<16>(x[14]);
 
       x[10] += x[15];
       x[11] += x[12];
@@ -187,10 +231,10 @@ private:
       x[7] ^= x[8];
       x[4] ^= x[9];
 
-      x[5] = xsimd::rotl(x[5], 12);
-      x[6] = xsimd::rotl(x[6], 12);
-      x[7] = xsimd::rotl(x[7], 12);
-      x[4] = xsimd::rotl(x[4], 12);
+      x[5] = xsimd::rotl<12>(x[5]);
+      x[6] = xsimd::rotl<12>(x[6]);
+      x[7] = xsimd::rotl<12>(x[7]);
+      x[4] = xsimd::rotl<12>(x[4]);
 
       x[0] += x[5];
       x[1] += x[6];
@@ -202,10 +246,10 @@ private:
       x[13] ^= x[2];
       x[14] ^= x[3];
 
-      x[15] = xsimd::rotl(x[15], 8);
-      x[12] = xsimd::rotl(x[12], 8);
-      x[13] = xsimd::rotl(x[13], 8);
-      x[14] = xsimd::rotl(x[14], 8);
+      x[15] = xsimd::rotl<8>(x[15]);
+      x[12] = xsimd::rotl<8>(x[12]);
+      x[13] = xsimd::rotl<8>(x[13]);
+      x[14] = xsimd::rotl<8>(x[14]);
 
       x[10] += x[15];
       x[11] += x[12];
@@ -217,31 +261,28 @@ private:
       x[7] ^= x[8];
       x[4] ^= x[9];
 
-      x[5] = xsimd::rotl(x[5], 7);
-      x[6] = xsimd::rotl(x[6], 7);
-      x[7] = xsimd::rotl(x[7], 7);
-      x[4] = xsimd::rotl(x[4], 7);
+      x[5] = xsimd::rotl<7>(x[5]);
+      x[6] = xsimd::rotl<7>(x[6]);
+      x[7] = xsimd::rotl<7>(x[7]);
+      x[4] = xsimd::rotl<7>(x[4]);
     }
 
     for (auto i = 0; i < MATRIX_WORDCOUNT; ++i) {
       x[i] += simd_type::broadcast(m_state[i]);
     }
+    // Remember to apply counter increments when summing rounds results with the original states.
     x[12] += lower_counter_inc;
     x[13] += higher_counter_inc;
 
-
-    // Batch i contains the i'th word of all chacha blocks, so transpose
-    // to make row j have all words of the j'th chacha block.
-    matrix_word tmp[SIMD_WIDTH];
+    // Batch i contains the i'th word of all chacha blocks, so transpose to get rows of chacha blocks.
+    alignas(simd_type::arch_type::alignment()) simd_type scatter_offsets =
+      xsimd::load_unaligned(matrix_word_sequence(std::make_index_sequence<SIMD_WIDTH>{}, MATRIX_WORDCOUNT).data());
     for (auto i = 0; i < MATRIX_WORDCOUNT; ++i) {
-      x[i].store_unaligned(tmp);
-      for (auto j = 0; j < SIMD_WIDTH; ++j) {
-        m_cache[j][i] = tmp[j];
-      }
+      x[i].scatter(m_cache.data() + i, scatter_offsets);
     }
 
     m_state[12] += SIMD_WIDTH;
-    m_state[13] += c < SIMD_WIDTH;
+    m_state[13] += overflow_index < SIMD_WIDTH;
   }
 };
 }
