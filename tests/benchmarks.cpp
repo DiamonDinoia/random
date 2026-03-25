@@ -1,18 +1,56 @@
 #include <iostream>
 #include <nanobench.h>
 #include <random>
+#include <random/chacha.hpp>
+#include <random/chacha_simd.hpp>
 #include <random/xoshiro_simd.hpp>
 
 #include "xoshiro256plusplus.c"
 
 static constexpr auto iterations = 1;
-int main() {
+
+namespace {
+
+template <class Block>
+std::uint32_t fold_block(const Block &block) {
+  std::uint32_t acc = 0;
+  for (const auto word : block) {
+    acc ^= word;
+  }
+  return acc;
+}
+
+ankerl::nanobench::Bench make_bench(const char *title, const char *unit,
+                                    double batch) {
   using namespace std::chrono_literals;
+
+  return ankerl::nanobench::Bench()
+    .title(title)
+    .unit(unit)
+    .batch(batch)
+    .minEpochTime(50ms)
+    .minEpochIterations(2000)
+    .relative(true);
+}
+
+} // namespace
+
+int main() {
+  static constexpr auto chacha_blocks = std::size_t{1} << 12;
   volatile const auto seed = 42;
   std::cout << "SEED: " << seed << std::endl;
   prng::XoshiroNative rng(seed);
   prng::XoshiroScalar reference(seed);
   prng::XoshiroSIMD dispatch(seed);
+  using ScalarChaCha20 = prng::ChaCha<20>;
+  using SimdChaCha20 = prng::ChaChaSIMD<20, xsimd::best_arch>;
+  constexpr std::array<ScalarChaCha20::matrix_word, 8> chacha_key = {
+    0x03020100u, 0x07060504u, 0x0b0a0908u, 0x0f0e0d0cu,
+    0x13121110u, 0x17161514u, 0x1b1a1918u, 0x1f1e1d1cu,
+  };
+  constexpr ScalarChaCha20::input_word chacha_counter = 0x0706050403020100ULL;
+  constexpr ScalarChaCha20::input_word chacha_nonce = 0x0f0e0d0c0b0a0908ULL;
+  std::cout << "ChaCha SIMD width: " << SimdChaCha20::simd_type::size << std::endl;
 
   s[0] = reference.getState()[0];
   s[1] = reference.getState()[1];
@@ -22,30 +60,88 @@ int main() {
   std::uniform_real_distribution<double> double_dist(0.0, 1.0);
   std::mt19937_64 mt(seed);
   using ankerl::nanobench::doNotOptimizeAway;
-  ankerl::nanobench::Bench().minEpochTime(20ms).batch(iterations)
-  .run("Reference Xoshiro UINT64", [&] {
-     for (int i = 0; i < iterations; ++i) doNotOptimizeAway(next());
-  }).run("XoshiroSIMD UINT64", [&] {
-     for (int i = 0; i < iterations; ++i) doNotOptimizeAway(rng());
-  }).run("Scalar Xoshiro UINT64", [&] {
-     for (int i = 0; i < iterations; ++i) doNotOptimizeAway(reference());
-  }).run("Dispatch Xoshiro UINT64", [&] {
-     for (int i = 0; i < iterations; ++i) doNotOptimizeAway(dispatch());
-  }).run("MersenneTwister UINT64", [&] {
-     for (int i = 0; i < iterations; ++i) doNotOptimizeAway(mt());
-  }).run("XoshiroSIMD DOUBLE", [&] {
-     for (int i = 0; i < iterations; ++i) doNotOptimizeAway(rng.uniform());
-  }).run("Scalar Xoshiro DOUBLE", [&] {
-     for (int i = 0; i < iterations; ++i) doNotOptimizeAway(reference.uniform());
-  }).run("Dispatch Xoshiro DOUBLE", [&] {
-     for (int i = 0; i < iterations; ++i) doNotOptimizeAway(dispatch.uniform());
-  }).run("XoshiroSIMD std::random<double>", [&] {
-     for (int i = 0; i < iterations; ++i) doNotOptimizeAway(double_dist(rng));
-  }).run("Scalar Xoshiro std::random<double>", [&] {
-     for (int i = 0; i < iterations; ++i) doNotOptimizeAway(double_dist(reference));
-  }).run("Dispatch Xoshiro std::random<double>", [&] {
-     for (int i = 0; i < iterations; ++i) doNotOptimizeAway(double_dist(dispatch));
-  }).run("MersenneTwister std::random<double>", [&] {
-     for (int i = 0; i < iterations; ++i) doNotOptimizeAway(double_dist(mt));
-  });
+  make_bench("UINT64 generation", "sample", static_cast<double>(iterations))
+    .run("Reference Xoshiro UINT64", [&] {
+      for (int i = 0; i < iterations; ++i) {
+        doNotOptimizeAway(next());
+      }
+    })
+    .run("XoshiroSIMD UINT64", [&] {
+      for (int i = 0; i < iterations; ++i) {
+        doNotOptimizeAway(rng());
+      }
+    })
+    .run("Scalar Xoshiro UINT64", [&] {
+      for (int i = 0; i < iterations; ++i) {
+        doNotOptimizeAway(reference());
+      }
+    })
+    .run("Dispatch Xoshiro UINT64", [&] {
+      for (int i = 0; i < iterations; ++i) {
+        doNotOptimizeAway(dispatch());
+      }
+    })
+    .run("MersenneTwister UINT64", [&] {
+      for (int i = 0; i < iterations; ++i) {
+        doNotOptimizeAway(mt());
+      }
+    });
+
+  make_bench("Unit-interval doubles", "sample", static_cast<double>(iterations))
+    .run("XoshiroSIMD DOUBLE", [&] {
+      for (int i = 0; i < iterations; ++i) {
+        doNotOptimizeAway(rng.uniform());
+      }
+    })
+    .run("Scalar Xoshiro DOUBLE", [&] {
+      for (int i = 0; i < iterations; ++i) {
+        doNotOptimizeAway(reference.uniform());
+      }
+    })
+    .run("Dispatch Xoshiro DOUBLE", [&] {
+      for (int i = 0; i < iterations; ++i) {
+        doNotOptimizeAway(dispatch.uniform());
+      }
+    });
+
+  make_bench("std::uniform_real_distribution<double>", "sample",
+             static_cast<double>(iterations))
+    .run("XoshiroSIMD std::random<double>", [&] {
+      for (int i = 0; i < iterations; ++i) {
+        doNotOptimizeAway(double_dist(rng));
+      }
+    })
+    .run("Scalar Xoshiro std::random<double>", [&] {
+      for (int i = 0; i < iterations; ++i) {
+        doNotOptimizeAway(double_dist(reference));
+      }
+    })
+    .run("Dispatch Xoshiro std::random<double>", [&] {
+      for (int i = 0; i < iterations; ++i) {
+        doNotOptimizeAway(double_dist(dispatch));
+      }
+    })
+    .run("MersenneTwister std::random<double>", [&] {
+      for (int i = 0; i < iterations; ++i) {
+        doNotOptimizeAway(double_dist(mt));
+      }
+    });
+
+  make_bench("ChaCha20 64-byte blocks", "block",
+             static_cast<double>(chacha_blocks))
+    .run("ChaCha20 scalar block", [&] {
+      ScalarChaCha20 chacha_scalar(chacha_key, chacha_counter, chacha_nonce);
+      std::uint32_t acc = 0;
+      for (std::size_t i = 0; i < chacha_blocks; ++i) {
+        acc ^= fold_block(chacha_scalar());
+      }
+      doNotOptimizeAway(acc);
+    }).run("ChaCha20 SIMD block", [&] {
+      SimdChaCha20 chacha_simd(chacha_key, chacha_counter, chacha_nonce);
+      std::uint32_t acc = 0;
+      for (std::size_t i = 0; i < chacha_blocks; ++i) {
+        acc ^= fold_block(chacha_simd());
+      }
+      doNotOptimizeAway(acc);
+    });
 }

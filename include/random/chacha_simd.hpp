@@ -1,10 +1,12 @@
 #pragma once
 
-#include <algorithm>
 #include <array>
+#if __cplusplus >= 202002L
+#include <bit>
+#endif
 #include <cstdint>
 #include <limits>
-#include <utility>
+#include <type_traits>
 #include <xsimd/xsimd.hpp>
 
 #include "random/macros.hpp"
@@ -15,8 +17,6 @@ namespace prng {
 template <std::uint8_t R, class Arch>
 class ChaChaSIMD {
 protected:
-  static constexpr auto MATRIX_ROW_LEN = std::uint8_t{4};
-  static constexpr auto MATRIX_COL_LEN = std::uint8_t{4};
   static constexpr auto MATRIX_WORDCOUNT = std::uint8_t{16};
   static constexpr auto KEY_WORDCOUNT = std::uint8_t{8};
 
@@ -24,13 +24,56 @@ public:
   using input_word = std::uint64_t;
   using matrix_word = std::uint32_t;
   using matrix_type = std::array<matrix_word, MATRIX_WORDCOUNT>;
-  using rounds_type = std::uint8_t;
   using simd_type = xsimd::batch<matrix_word, Arch>;
+  using working_state_type = std::array<simd_type, MATRIX_WORDCOUNT>;
 
 protected:
   static constexpr std::uint8_t SIMD_WIDTH = std::uint8_t{simd_type::size};
-  static constexpr auto CACHE_WORDCOUNT = std::uint16_t{MATRIX_WORDCOUNT * SIMD_WIDTH};
-  static constexpr auto CACHE_BLOCKCOUNT = SIMD_WIDTH;
+#if __cplusplus >= 202002L
+  static_assert(std::has_single_bit(static_cast<unsigned int>(SIMD_WIDTH)),
+                "ChaCha SIMD width must be a power of two");
+  static constexpr std::uint8_t SIMD_WIDTH_SHIFT =
+    static_cast<std::uint8_t>(std::countr_zero(static_cast<unsigned int>(SIMD_WIDTH)));
+#else
+  static constexpr bool is_power_of_two(std::uint8_t value) noexcept {
+    return value != 0 && (value & (value - 1)) == 0;
+  }
+
+  static constexpr std::uint8_t bit_shift(std::uint8_t value) noexcept {
+    std::uint8_t shift = 0;
+    while (value > 1) {
+      value >>= 1;
+      ++shift;
+    }
+    return shift;
+  }
+
+  static_assert(is_power_of_two(SIMD_WIDTH), "ChaCha SIMD width must be a power of two");
+  static constexpr std::uint8_t SIMD_WIDTH_SHIFT = bit_shift(SIMD_WIDTH);
+#endif
+  static_assert(MATRIX_WORDCOUNT % SIMD_WIDTH == 0, "ChaCha state must divide evenly into SIMD segments");
+  static constexpr std::uint8_t SIMD_WIDTH_MASK = std::uint8_t{SIMD_WIDTH - 1};
+  static constexpr std::uint8_t BLOCK_SEGMENTCOUNT = std::uint8_t{MATRIX_WORDCOUNT / SIMD_WIDTH};
+  static constexpr std::uint8_t cache_batchcount() noexcept {
+    if constexpr (std::is_base_of_v<xsimd::avx512f, Arch>) {
+      return 2;
+    } else {
+      return 1;
+    }
+  }
+
+  static constexpr auto CACHE_BATCHCOUNT = cache_batchcount();
+  static constexpr auto CACHE_BLOCKCOUNT = std::uint8_t{CACHE_BATCHCOUNT * SIMD_WIDTH};
+  using cache_block_type = std::array<simd_type, BLOCK_SEGMENTCOUNT>;
+  using cache_batch_type = std::array<cache_block_type, SIMD_WIDTH>;
+#if __cplusplus >= 202002L
+  static_assert(sizeof(cache_block_type) == sizeof(matrix_type),
+                "Cache blocks must have the same layout size as a ChaCha block");
+  static_assert(std::is_trivially_copyable_v<cache_block_type>,
+                "Cache blocks must be trivially copyable for bit_cast");
+  static_assert(std::is_trivially_copyable_v<matrix_type>,
+                "ChaCha blocks must be trivially copyable for bit_cast");
+#endif
 
 public:
   /**
@@ -51,7 +94,7 @@ public:
     m_state[2] = 0x79622d32;
     m_state[3] = 0x6b206574;
 
-    for (auto i = 0; i < 8; ++i) {
+    for (auto i = std::size_t{0}; i < KEY_WORDCOUNT; ++i) {
       m_state[4 + i] = key[i];
     }
 
@@ -71,10 +114,21 @@ public:
       gen_next_blocks_in_cache();
       m_index = 0;
     }
-    matrix_word *cache_block = m_cache.data() + (m_index++ * MATRIX_WORDCOUNT);
+    const auto cache_batch = m_index >> SIMD_WIDTH_SHIFT;
+    const auto lane = m_index & SIMD_WIDTH_MASK;
+    ++m_index;
+#if __cplusplus >= 202002L
+    return std::bit_cast<matrix_type>(m_cache[cache_batch][lane]);
+#else
     matrix_type block;
-    std::copy(cache_block, cache_block + MATRIX_WORDCOUNT, block.begin());
+    const auto& cached_block = m_cache[cache_batch][lane];
+    const auto* PRNG_RESTRICT cached_segments = cached_block.data();
+    auto* PRNG_RESTRICT out = block.data();
+    for (auto segment = std::size_t{0}; segment < BLOCK_SEGMENTCOUNT; ++segment) {
+      cached_segments[segment].store_unaligned(out + segment * SIMD_WIDTH);
+    }
     return block;
+#endif
   }
 
   /**
@@ -95,55 +149,83 @@ public:
 
 private:
   matrix_type m_state;
-  std::array<matrix_word, CACHE_WORDCOUNT> m_cache;
+  alignas(simd_type::arch_type::alignment()) std::array<cache_batch_type, CACHE_BATCHCOUNT> m_cache;
   // Initalize to "past end of the cache" since cache starts empty
   std::uint8_t m_index = CACHE_BLOCKCOUNT;
 
-  /**
-   * Return an array { 0, 1 * step, ..., (n - 1) * step }. Can be used to initialize a batch for
-   * consecutively incremeting elements in a batch of low counter words, as well as
-   * a batch of offsets to scatter matrix words into memory with.
-  */
-  template <size_t... Is>
-  static constexpr PRNG_ALWAYS_INLINE std::array<matrix_word, sizeof...(Is)> matrix_word_sequence(std::index_sequence<Is...>, std::uint8_t step = 1) noexcept {
-    return {static_cast<matrix_word>(Is * step)...};
-  }
+  static inline constexpr std::array<matrix_word, SIMD_WIDTH> LANE_OFFSETS = [] {
+    std::array<matrix_word, SIMD_WIDTH> offsets{};
+    for (auto i = std::size_t{0}; i < SIMD_WIDTH; ++i) {
+      offsets[i] = static_cast<matrix_word>(i);
+    }
+    return offsets;
+  }();
 
   /**
    * Return an array { 0, n < 1, n < 2, ..., n < (SIMD_WIDTH - 1) }. Can be used to initialize a
    * batch for incremetinng elements in a batch of consecutive high counter words, depending on at
    * what index the corresponding lower counter words had an overflow.
    */
-  PRNG_ALWAYS_INLINE static constexpr std::array<matrix_word, SIMD_WIDTH> make_higher_counter_inc(std::uint8_t n) noexcept {
-    std::array<matrix_word, SIMD_WIDTH> incs;
-    incs[0] = 0;
-    for (auto i = 1; i < SIMD_WIDTH; ++i) {
-      incs[i] = n < i;
+  PRNG_ALWAYS_INLINE static simd_type make_higher_counter_inc(matrix_word overflow_index) noexcept {
+    if (overflow_index >= SIMD_WIDTH) [[likely]] {
+      return simd_type::broadcast(0);
     }
-    return incs;
+
+    std::array<matrix_word, SIMD_WIDTH> incs{};
+    for (auto i = std::size_t{1}; i < SIMD_WIDTH; ++i) {
+      incs[i] = static_cast<matrix_word>(overflow_index < i);
+    }
+    return xsimd::load_unaligned(incs.data());
   }
 
-  /**
-   * Generates `SIMD_WIDTH` new ChaCha blocks, and write them all into the cache. Will overwrite
-   * anything else in the cache.
-   */
-  PRNG_ALWAYS_INLINE constexpr void gen_next_blocks_in_cache() noexcept {
-    alignas(simd_type::arch_type::alignment()) simd_type lower_counter_inc, higher_counter_inc;
-    lower_counter_inc =
-      xsimd::load_unaligned(matrix_word_sequence(std::make_index_sequence<SIMD_WIDTH>{}).data());
-    matrix_word overflow_index = std::numeric_limits<matrix_word>::max() - m_state[12];
-    if (overflow_index < SIMD_WIDTH) [[unlikely]] {
-      higher_counter_inc = xsimd::load_unaligned(make_higher_counter_inc(overflow_index).data());
-    } else {
-      higher_counter_inc = simd_type::broadcast(0);
-    }
-
-    simd_type x[MATRIX_WORDCOUNT];
-    for (auto i = 0; i < MATRIX_WORDCOUNT; ++i) {
-      x[i] = simd_type::broadcast(m_state[i]);
+  PRNG_ALWAYS_INLINE static void init_state_batches(working_state_type& x, const matrix_type& state,
+                                                    simd_type lower_counter_inc, simd_type higher_counter_inc) noexcept {
+    for (auto i = std::size_t{0}; i < MATRIX_WORDCOUNT; ++i) {
+      x[i] = simd_type::broadcast(state[i]);
     }
     x[12] += lower_counter_inc;
     x[13] += higher_counter_inc;
+  }
+
+  PRNG_ALWAYS_INLINE static void add_original_state(working_state_type& x, const matrix_type& state,
+                                                    simd_type lower_counter_inc, simd_type higher_counter_inc) noexcept {
+    for (auto i = std::size_t{0}; i < MATRIX_WORDCOUNT; ++i) {
+      x[i] += simd_type::broadcast(state[i]);
+    }
+    x[12] += lower_counter_inc;
+    x[13] += higher_counter_inc;
+  }
+
+  static void transpose_into_cache(cache_batch_type& cache, working_state_type& x) noexcept {
+    auto* PRNG_RESTRICT cache_lanes = cache.data();
+    auto* PRNG_RESTRICT working = x.data();
+    for (auto segment = std::size_t{0}; segment < BLOCK_SEGMENTCOUNT; ++segment) {
+      auto* PRNG_RESTRICT segment_begin = working + segment * SIMD_WIDTH;
+      xsimd::transpose(segment_begin, segment_begin + SIMD_WIDTH);
+      for (auto lane = std::size_t{0}; lane < SIMD_WIDTH; ++lane) {
+        cache_lanes[lane][segment] = segment_begin[lane];
+      }
+    }
+  }
+
+  /**
+   * Advances the 64-bit ChaCha block counter by a vector-width worth of blocks.
+   */
+  PRNG_ALWAYS_INLINE static constexpr void advance_counter(matrix_type& state) noexcept {
+    state[12] += SIMD_WIDTH;
+    state[13] += state[12] < SIMD_WIDTH;
+  }
+
+  /**
+   * Generates `SIMD_WIDTH` new ChaCha blocks into one cache batch.
+   */
+  PRNG_ALWAYS_INLINE static void gen_block_batch(cache_batch_type& cache, const matrix_type& state) noexcept {
+    const auto lower_counter_inc = xsimd::load_unaligned(LANE_OFFSETS.data());
+    matrix_word overflow_index = std::numeric_limits<matrix_word>::max() - state[12];
+    const auto higher_counter_inc = make_higher_counter_inc(overflow_index);
+
+    working_state_type x;
+    init_state_batches(x, state, lower_counter_inc, higher_counter_inc);
 
     for (auto i = 0; i < R; i += 2) {
       x[0] += x[4];
@@ -267,22 +349,20 @@ private:
       x[4] = xsimd::rotl<7>(x[4]);
     }
 
-    for (auto i = 0; i < MATRIX_WORDCOUNT; ++i) {
-      x[i] += simd_type::broadcast(m_state[i]);
-    }
-    // Remember to apply counter increments when summing rounds results with the original states.
-    x[12] += lower_counter_inc;
-    x[13] += higher_counter_inc;
+    add_original_state(x, state, lower_counter_inc, higher_counter_inc);
+    transpose_into_cache(cache, x);
+  }
 
-    // Batch i contains the i'th word of all chacha blocks, so transpose to get rows of chacha blocks.
-    alignas(simd_type::arch_type::alignment()) simd_type scatter_offsets =
-      xsimd::load_unaligned(matrix_word_sequence(std::make_index_sequence<SIMD_WIDTH>{}, MATRIX_WORDCOUNT).data());
-    for (auto i = 0; i < MATRIX_WORDCOUNT; ++i) {
-      x[i].scatter(m_cache.data() + i, scatter_offsets);
+  /**
+   * Generates one or two SIMD batches, depending on the target ISA, and writes them into the cache.
+   */
+  PRNG_ALWAYS_INLINE constexpr void gen_next_blocks_in_cache() noexcept {
+    auto state = m_state;
+    for (auto batch = std::uint8_t{0}; batch < CACHE_BATCHCOUNT; ++batch) {
+      gen_block_batch(m_cache[batch], state);
+      advance_counter(state);
     }
-
-    m_state[12] += SIMD_WIDTH;
-    m_state[13] += overflow_index < SIMD_WIDTH;
+    m_state = state;
   }
 };
 }

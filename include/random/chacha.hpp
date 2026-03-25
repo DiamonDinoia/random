@@ -108,19 +108,16 @@ private:
    * @brief Increments the counter component of the state by 1
    */
   constexpr PRNG_ALWAYS_INLINE void inc_counter() noexcept {
-    const matrix_word lower = m_state[12];
-    const matrix_word upper = m_state[13];
-    input_word counter = (static_cast<input_word>(upper) << 32) | static_cast<input_word>(lower);
-    ++counter;
-    m_state[12] = static_cast<matrix_word>(counter & 0xFFFFFFFF);
-    m_state[13] = static_cast<matrix_word>(counter >> 32);
+    if (++m_state[12] == 0) {
+      ++m_state[13];
+    }
   }
 
   /**
    * @brief Returns the next output from the generator, then increases state's counter by 1.
    * @return The output for the current internal state.
   */
-  constexpr PRNG_ALWAYS_INLINE matrix_type next() noexcept {
+  PRNG_FLATTEN constexpr PRNG_ALWAYS_INLINE matrix_type next() noexcept {
     matrix_type x = m_state;
     
     // Note that we perform both an odd and even round at the same time.

@@ -166,4 +166,3 @@ install(FILES
         "${CMAKE_CURRENT_BINARY_DIR}/randomConfigVersion.cmake"
         DESTINATION lib/cmake/random
 )
-
