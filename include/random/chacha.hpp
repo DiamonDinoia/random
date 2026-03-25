@@ -19,9 +19,19 @@ protected:
   static constexpr auto KEY_WORDCOUNT = std::uint8_t{8};
 
 public:
+  using result_type = std::uint64_t;
   using input_word = std::uint64_t;
   using matrix_word = std::uint32_t;
   using matrix_type = std::array<matrix_word, MATRIX_WORDCOUNT>;
+  using result_cache_type = std::array<result_type, MATRIX_WORDCOUNT / 2>;
+
+  static constexpr PRNG_ALWAYS_INLINE auto(min)() noexcept {
+    return (std::numeric_limits<result_type>::min)();
+  }
+
+  static constexpr PRNG_ALWAYS_INLINE auto(max)() noexcept {
+    return (std::numeric_limits<result_type>::max)();
+  }
 
   /**
    * @brief Construct a scalar ChaCha generator with given key, counter and nonce
@@ -53,19 +63,52 @@ public:
   }
 
   /**
-   * @brief Generates the next random block.
-   * @return The next random block.
+   * @brief Generates the next 64-bit output.
+   * @return The next 64-bit output.
    */
-  PRNG_ALWAYS_INLINE constexpr matrix_type(operator())() noexcept { return next(); }
+  PRNG_ALWAYS_INLINE constexpr result_type(operator())() noexcept { return next_result(); }
+
+  /**
+   * @brief Generates a uniform random number in the range [0, 1).
+   * @return A uniform random number.
+   */
+  PRNG_ALWAYS_INLINE constexpr double uniform() noexcept {
+    return static_cast<double>(operator()() >> 11) * 0x1.0p-53;
+  }
+
+  /**
+   * @brief Generates the next 64-byte ChaCha block.
+   * @return The next 64-byte ChaCha block.
+   */
+  PRNG_ALWAYS_INLINE constexpr matrix_type block() noexcept {
+    if (m_result_index < m_result_cache.size()) {
+      auto cached_block = results_to_block(m_result_cache);
+      m_result_index = static_cast<std::uint8_t>(m_result_cache.size());
+      return cached_block;
+    }
+    return next_block();
+  }
 
   /**
    * @brief Returns the state of the generator; a 4x4 matrix.
    * @return State of the generator.
    */
-  PRNG_ALWAYS_INLINE constexpr matrix_type getState() const noexcept { return m_state; }
+  PRNG_ALWAYS_INLINE constexpr matrix_type getState() const noexcept {
+    matrix_type state = m_state;
+    if (m_result_index < m_result_cache.size()) {
+      const input_word counter =
+        (static_cast<input_word>(state[13]) << 32) | static_cast<input_word>(state[12]);
+      const input_word current_counter = counter - 1;
+      state[12] = static_cast<matrix_word>(current_counter & 0xFFFFFFFF);
+      state[13] = static_cast<matrix_word>(current_counter >> 32);
+    }
+    return state;
+  }
 
 private:
   matrix_type m_state;
+  result_cache_type m_result_cache{};
+  std::uint8_t m_result_index = static_cast<std::uint8_t>(m_result_cache.size());
 
   // NOTE: THis is almost identical to the rotl in xoshiro_scalar, safe for the nubmer
   // of bits the operation is performed on. Maybe wanna consider making it a shared func?
@@ -113,11 +156,46 @@ private:
     }
   }
 
+  static constexpr PRNG_ALWAYS_INLINE result_cache_type block_to_results(const matrix_type& block) noexcept {
+#if __cplusplus >= 202002L
+    return std::bit_cast<result_cache_type>(block);
+#else
+    result_cache_type results{};
+    for (auto i = std::size_t{0}; i < results.size(); ++i) {
+      results[i] =
+        static_cast<result_type>(block[2 * i]) |
+        (static_cast<result_type>(block[2 * i + 1]) << 32);
+    }
+    return results;
+#endif
+  }
+
+  static constexpr PRNG_ALWAYS_INLINE matrix_type results_to_block(const result_cache_type& results) noexcept {
+#if __cplusplus >= 202002L
+    return std::bit_cast<matrix_type>(results);
+#else
+    matrix_type block{};
+    for (auto i = std::size_t{0}; i < results.size(); ++i) {
+      block[2 * i] = static_cast<matrix_word>(results[i] & 0xFFFFFFFF);
+      block[2 * i + 1] = static_cast<matrix_word>(results[i] >> 32);
+    }
+    return block;
+#endif
+  }
+
+  constexpr PRNG_ALWAYS_INLINE result_type next_result() noexcept {
+    if (m_result_index >= m_result_cache.size()) [[unlikely]] {
+      m_result_cache = block_to_results(next_block());
+      m_result_index = 0;
+    }
+    return m_result_cache[m_result_index++];
+  }
+
   /**
    * @brief Returns the next output from the generator, then increases state's counter by 1.
    * @return The output for the current internal state.
   */
-  PRNG_FLATTEN constexpr PRNG_ALWAYS_INLINE matrix_type next() noexcept {
+  PRNG_FLATTEN constexpr PRNG_ALWAYS_INLINE matrix_type next_block() noexcept {
     matrix_type x = m_state;
     
     // Note that we perform both an odd and even round at the same time.

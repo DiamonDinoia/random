@@ -24,7 +24,7 @@ TEST_CASE("SEED", "[chacha]") {
   ChaCha20SIMD chaCha20SIMD(key, counter, nonce);
   for (auto i = 0; i < seed_tests; ++i) {
     REQUIRE(chaCha20SIMD.getState() == chaCha20Reference.getState());
-    REQUIRE(chaCha20SIMD() == chaCha20Reference());
+    REQUIRE(chaCha20SIMD.block() == chaCha20Reference.block());
   }
 }
 
@@ -51,7 +51,7 @@ TEST_CASE("COUNTER OVERFLOW", "[chacha]") {
     for (std::size_t lane = 0; lane < ChaCha20SIMD::simd_type::size; ++lane) {
       INFO("lane: " << lane);
       REQUIRE(chaCha20SIMD.getState() == chaCha20Reference.getState());
-      REQUIRE(chaCha20SIMD() == chaCha20Reference());
+      REQUIRE(chaCha20SIMD.block() == chaCha20Reference.block());
     }
   }
 }

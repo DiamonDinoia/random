@@ -11,15 +11,6 @@ static constexpr auto iterations = 1;
 
 namespace {
 
-template <class Block>
-std::uint32_t fold_block(const Block &block) {
-  std::uint32_t acc = 0;
-  for (const auto word : block) {
-    acc ^= word;
-  }
-  return acc;
-}
-
 ankerl::nanobench::Bench make_bench(const char *title, const char *unit,
                                     double batch) {
   using namespace std::chrono_literals;
@@ -36,7 +27,6 @@ ankerl::nanobench::Bench make_bench(const char *title, const char *unit,
 } // namespace
 
 int main() {
-  static constexpr auto chacha_blocks = std::size_t{1} << 12;
   volatile const auto seed = 42;
   std::cout << "SEED: " << seed << std::endl;
   prng::XoshiroNative rng(seed);
@@ -51,6 +41,12 @@ int main() {
   constexpr ScalarChaCha20::input_word chacha_counter = 0x0706050403020100ULL;
   constexpr ScalarChaCha20::input_word chacha_nonce = 0x0f0e0d0c0b0a0908ULL;
   std::cout << "ChaCha SIMD width: " << SimdChaCha20::simd_type::size << std::endl;
+  ScalarChaCha20 chacha_scalar_uint64(chacha_key, chacha_counter, chacha_nonce);
+  SimdChaCha20 chacha_simd_uint64(chacha_key, chacha_counter, chacha_nonce);
+  ScalarChaCha20 chacha_scalar_double(chacha_key, chacha_counter, chacha_nonce);
+  SimdChaCha20 chacha_simd_double(chacha_key, chacha_counter, chacha_nonce);
+  ScalarChaCha20 chacha_scalar_dist(chacha_key, chacha_counter, chacha_nonce);
+  SimdChaCha20 chacha_simd_dist(chacha_key, chacha_counter, chacha_nonce);
 
   s[0] = reference.getState()[0];
   s[1] = reference.getState()[1];
@@ -85,6 +81,16 @@ int main() {
       for (int i = 0; i < iterations; ++i) {
         doNotOptimizeAway(mt());
       }
+    })
+    .run("ChaCha20 scalar UINT64", [&] {
+      for (int i = 0; i < iterations; ++i) {
+        doNotOptimizeAway(chacha_scalar_uint64());
+      }
+    })
+    .run("ChaCha20 SIMD UINT64", [&] {
+      for (int i = 0; i < iterations; ++i) {
+        doNotOptimizeAway(chacha_simd_uint64());
+      }
     });
 
   make_bench("Unit-interval doubles", "sample", static_cast<double>(iterations))
@@ -101,6 +107,16 @@ int main() {
     .run("Dispatch Xoshiro DOUBLE", [&] {
       for (int i = 0; i < iterations; ++i) {
         doNotOptimizeAway(dispatch.uniform());
+      }
+    })
+    .run("ChaCha20 scalar DOUBLE", [&] {
+      for (int i = 0; i < iterations; ++i) {
+        doNotOptimizeAway(chacha_scalar_double.uniform());
+      }
+    })
+    .run("ChaCha20 SIMD DOUBLE", [&] {
+      for (int i = 0; i < iterations; ++i) {
+        doNotOptimizeAway(chacha_simd_double.uniform());
       }
     });
 
@@ -125,23 +141,16 @@ int main() {
       for (int i = 0; i < iterations; ++i) {
         doNotOptimizeAway(double_dist(mt));
       }
+    })
+    .run("ChaCha20 scalar std::random<double>", [&] {
+      for (int i = 0; i < iterations; ++i) {
+        doNotOptimizeAway(double_dist(chacha_scalar_dist));
+      }
+    })
+    .run("ChaCha20 SIMD std::random<double>", [&] {
+      for (int i = 0; i < iterations; ++i) {
+        doNotOptimizeAway(double_dist(chacha_simd_dist));
+      }
     });
 
-  make_bench("ChaCha20 64-byte blocks", "block",
-             static_cast<double>(chacha_blocks))
-    .run("ChaCha20 scalar block", [&] {
-      ScalarChaCha20 chacha_scalar(chacha_key, chacha_counter, chacha_nonce);
-      std::uint32_t acc = 0;
-      for (std::size_t i = 0; i < chacha_blocks; ++i) {
-        acc ^= fold_block(chacha_scalar());
-      }
-      doNotOptimizeAway(acc);
-    }).run("ChaCha20 SIMD block", [&] {
-      SimdChaCha20 chacha_simd(chacha_key, chacha_counter, chacha_nonce);
-      std::uint32_t acc = 0;
-      for (std::size_t i = 0; i < chacha_blocks; ++i) {
-        acc ^= fold_block(chacha_simd());
-      }
-      doNotOptimizeAway(acc);
-    });
 }

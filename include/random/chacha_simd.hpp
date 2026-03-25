@@ -21,11 +21,21 @@ protected:
   static constexpr auto KEY_WORDCOUNT = std::uint8_t{8};
 
 public:
+  using result_type = std::uint64_t;
   using input_word = std::uint64_t;
   using matrix_word = std::uint32_t;
   using matrix_type = std::array<matrix_word, MATRIX_WORDCOUNT>;
   using simd_type = xsimd::batch<matrix_word, Arch>;
   using working_state_type = std::array<simd_type, MATRIX_WORDCOUNT>;
+  using result_cache_type = std::array<result_type, MATRIX_WORDCOUNT / 2>;
+
+  static constexpr PRNG_ALWAYS_INLINE auto(min)() noexcept {
+    return (std::numeric_limits<result_type>::min)();
+  }
+
+  static constexpr PRNG_ALWAYS_INLINE auto(max)() noexcept {
+    return (std::numeric_limits<result_type>::max)();
+  }
 
 protected:
   static constexpr std::uint8_t SIMD_WIDTH = std::uint8_t{simd_type::size};
@@ -106,29 +116,36 @@ public:
   }
 
   /**
-   * @brief Generates the next random block.
-   * @return The next random block.
+   * @brief Generates the next 64-bit output.
+   * @return The next 64-bit output.
    */
-  PRNG_ALWAYS_INLINE constexpr matrix_type operator()() noexcept {
-    if (m_index >= CACHE_BLOCKCOUNT) [[unlikely]] {
-      gen_next_blocks_in_cache();
-      m_index = 0;
+  PRNG_ALWAYS_INLINE constexpr result_type operator()() noexcept {
+    if (m_result_index >= m_result_cache.size()) [[unlikely]] {
+      m_result_cache = block_to_results(next_block());
+      m_result_index = 0;
     }
-    const auto cache_batch = m_index >> SIMD_WIDTH_SHIFT;
-    const auto lane = m_index & SIMD_WIDTH_MASK;
-    ++m_index;
-#if __cplusplus >= 202002L
-    return std::bit_cast<matrix_type>(m_cache[cache_batch][lane]);
-#else
-    matrix_type block;
-    const auto& cached_block = m_cache[cache_batch][lane];
-    const auto* PRNG_RESTRICT cached_segments = cached_block.data();
-    auto* PRNG_RESTRICT out = block.data();
-    for (auto segment = std::size_t{0}; segment < BLOCK_SEGMENTCOUNT; ++segment) {
-      cached_segments[segment].store_unaligned(out + segment * SIMD_WIDTH);
+    return m_result_cache[m_result_index++];
+  }
+
+  /**
+   * @brief Generates a uniform random number in the range [0, 1).
+   * @return A uniform random number.
+   */
+  PRNG_ALWAYS_INLINE constexpr double uniform() noexcept {
+    return static_cast<double>(operator()() >> 11) * 0x1.0p-53;
+  }
+
+  /**
+   * @brief Generates the next 64-byte ChaCha block.
+   * @return The next 64-byte ChaCha block.
+   */
+  PRNG_ALWAYS_INLINE constexpr matrix_type block() noexcept {
+    if (m_result_index < m_result_cache.size()) {
+      auto cached_block = results_to_block(m_result_cache);
+      m_result_index = static_cast<std::uint8_t>(m_result_cache.size());
+      return cached_block;
     }
-    return block;
-#endif
+    return next_block();
   }
 
   /**
@@ -137,9 +154,12 @@ public:
    */
   PRNG_ALWAYS_INLINE constexpr matrix_type getState() const noexcept {
     matrix_type state = m_state;
-    if (m_index < CACHE_BLOCKCOUNT) {
+    if (m_cache_index < CACHE_BLOCKCOUNT || m_result_index < m_result_cache.size()) {
       input_word counter = (static_cast<input_word>(state[13]) << 32) | static_cast<input_word>(state[12]);
-      counter -= static_cast<input_word>(CACHE_BLOCKCOUNT - m_index);
+      counter -= static_cast<input_word>(CACHE_BLOCKCOUNT - m_cache_index);
+      if (m_result_index < m_result_cache.size()) {
+        --counter;
+      }
       state[12] = static_cast<matrix_word>(counter & 0xFFFFFFFF);
       state[13] = static_cast<matrix_word>(counter >> 32);
     }
@@ -150,8 +170,10 @@ public:
 private:
   matrix_type m_state;
   alignas(simd_type::arch_type::alignment()) std::array<cache_batch_type, CACHE_BATCHCOUNT> m_cache;
-  // Initalize to "past end of the cache" since cache starts empty
-  std::uint8_t m_index = CACHE_BLOCKCOUNT;
+  result_cache_type m_result_cache{};
+  std::uint8_t m_result_index = static_cast<std::uint8_t>(m_result_cache.size());
+  // Initialize to "past end of the cache" since cache starts empty.
+  std::uint8_t m_cache_index = CACHE_BLOCKCOUNT;
 
   static inline constexpr std::array<matrix_word, SIMD_WIDTH> LANE_OFFSETS = [] {
     std::array<matrix_word, SIMD_WIDTH> offsets{};
@@ -176,6 +198,33 @@ private:
       incs[i] = static_cast<matrix_word>(overflow_index < i);
     }
     return xsimd::load_unaligned(incs.data());
+  }
+
+  static constexpr PRNG_ALWAYS_INLINE result_cache_type block_to_results(const matrix_type& block) noexcept {
+#if __cplusplus >= 202002L
+    return std::bit_cast<result_cache_type>(block);
+#else
+    result_cache_type results{};
+    for (auto i = std::size_t{0}; i < results.size(); ++i) {
+      results[i] =
+        static_cast<result_type>(block[2 * i]) |
+        (static_cast<result_type>(block[2 * i + 1]) << 32);
+    }
+    return results;
+#endif
+  }
+
+  static constexpr PRNG_ALWAYS_INLINE matrix_type results_to_block(const result_cache_type& results) noexcept {
+#if __cplusplus >= 202002L
+    return std::bit_cast<matrix_type>(results);
+#else
+    matrix_type block{};
+    for (auto i = std::size_t{0}; i < results.size(); ++i) {
+      block[2 * i] = static_cast<matrix_word>(results[i] & 0xFFFFFFFF);
+      block[2 * i + 1] = static_cast<matrix_word>(results[i] >> 32);
+    }
+    return block;
+#endif
   }
 
   PRNG_ALWAYS_INLINE static void init_state_batches(working_state_type& x, const matrix_type& state,
@@ -351,6 +400,29 @@ private:
 
     add_original_state(x, state, lower_counter_inc, higher_counter_inc);
     transpose_into_cache(cache, x);
+  }
+
+  PRNG_ALWAYS_INLINE constexpr matrix_type next_block() noexcept {
+    if (m_cache_index >= CACHE_BLOCKCOUNT) [[unlikely]] {
+      gen_next_blocks_in_cache();
+      m_cache_index = 0;
+    }
+
+    const auto cache_batch = m_cache_index >> SIMD_WIDTH_SHIFT;
+    const auto lane = m_cache_index & SIMD_WIDTH_MASK;
+    ++m_cache_index;
+#if __cplusplus >= 202002L
+    return std::bit_cast<matrix_type>(m_cache[cache_batch][lane]);
+#else
+    matrix_type block;
+    const auto& cached_block = m_cache[cache_batch][lane];
+    const auto* PRNG_RESTRICT cached_segments = cached_block.data();
+    auto* PRNG_RESTRICT out = block.data();
+    for (auto segment = std::size_t{0}; segment < BLOCK_SEGMENTCOUNT; ++segment) {
+      cached_segments[segment].store_unaligned(out + segment * SIMD_WIDTH);
+    }
+    return block;
+#endif
   }
 
   /**

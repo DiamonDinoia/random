@@ -53,7 +53,7 @@ TEST_CASE("ChaChaScalar", "[chacha]") {
         // Use Monocypher's ChaCha20 DJB variant to produce the keystream block.
         crypto_chacha20_djb(referenceOutput, zeros, 64, key, nonce, ctr);
 
-        const auto chachaOutput = rngChaCha();
+        const auto chachaOutput = rngChaCha.block();
         REQUIRE(std::memcmp(referenceOutput, chachaOutput.data(), 64) == 0);
     }
 }
